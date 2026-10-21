@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>osu! !np</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  #status { position: absolute; inset: 0; padding: 6px 8px; box-sizing: border-box; color: #fff; font: 13px/1.35 system-ui, sans-serif;
+            background: rgba(0,0,0,.55); white-space: pre-wrap; overflow: hidden; }
+  #status[hidden] { display: none; }
+  #status.err { background: rgba(120,20,20,.8); }
+</style>
+</head>
+<body>
+<div id="status" hidden></div>
+<script src="/plugin-sdk/oc.js"></script>
+<script src="logic.js"></script>
+<script>
+(function () {
+  "use strict";
+  // Значения по умолчанию совпадают с plugin.json.
+  var cfg = {
+    channel: oc.param("channel", "").trim(),
+    command: oc.param("command", "!np"),
+    who: oc.param("who", "everyone"),
+    cooldownSeconds: oc.param("cooldownSeconds", 15),
+    replyToUser: oc.param("replyToUser", true),
+    template: oc.param("template", "{artist} - {title} [{version}] {url}"),
+    unsubmittedText: oc.param("unsubmittedText", "This map is not on osu! (unsubmitted or local)"),
+    offlineText: oc.param("offlineText", "Can't read the current map right now (tosu is not running)"),
+    tosuHost: oc.param("tosuHost", "127.0.0.1:24050"),
+    showStatus: oc.param("showStatus", false)
+  };
+
+  var box = document.getElementById("status");
+  var lines = { tosu: "tosu: connecting…", chat: "chat: waiting…", map: "", last: "" };
+  var fatal = "";
+  function paint() {
+    var text = fatal || [lines.tosu, lines.chat, lines.map, lines.last].filter(Boolean).join("\n");
+    box.textContent = text;
+    box.className = fatal ? "err" : "";
+    box.hidden = !(fatal || cfg.showStatus);
+  }
+
+  // ---- tosu: держим последнее состояние (карта выбирается/играется — tosu всегда отдаёт текущую) ----
+  var tosu = null; // null — нет соединения/данных
+  var retry = 0, ws;
+  function connectTosu() {
+    if (!NP.validHost(cfg.tosuHost)) { fatal = "Invalid tosu address: " + cfg.tosuHost; paint(); return; }
+    ws = new WebSocket("ws://" + cfg.tosuHost + "/websocket/v2");
+    ws.onopen = function () { retry = 0; lines.tosu = "tosu: connected"; paint(); };
+    ws.onmessage = function (ev) {
+      try { tosu = JSON.parse(ev.data); } catch (e) { return; }
+      var d = NP.describe(tosu);
+      lines.map = "map: " + (d.kind === "none" ? "—" : d.vars.artist + " - " + d.vars.title + " [" + d.vars.version + "]" + (d.vars.id ? " #" + d.vars.id : " (not on osu!)"));
+      paint();
+    };
+    ws.onclose = function () {
+      tosu = null; lines.tosu = "tosu: not reachable (" + cfg.tosuHost + "), retrying…"; lines.map = ""; paint();
+      setTimeout(connectTosu, Math.min(10000, 1000 * Math.pow(2, retry++)));
+    };
+    ws.onerror = function () { try { ws.close(); } catch (e) {} };
+  }
+
+  // ---- чат ----
+  var cooldown = new NP.Cooldown(cfg.cooldownSeconds);
+  var lastSent = null;
+
+  function onMessage(m) {
+    if (m.fromBot || !NP.isCommand(m.text, cfg.command) || !NP.allowed(m, cfg.who)) return;
+    if (!cooldown.ready()) { lines.last = "cooldown: ignored " + cfg.command + " from " + m.displayName; paint(); return; }
+    var text = NP.reply(tosu, cfg, m.displayName);
+    if (!text) return;
+    cooldown.hit();
+    var now = Date.now();
+    text = NP.dedupe(text, lastSent, now);
+    lastSent = { text: text, at: now };
+    oc.chat.say(text, cfg.replyToUser ? { replyTo: m.id } : {}).then(function () {
+      lines.last = "sent to " + m.displayName; paint();
+    }, function (e) { lines.last = "send failed: " + e.message; paint(); });
+  }
+
+  oc.ready.then(function (info) {
+    var need = ["chat.read", "chat.send"].filter(function (p) { return info.permissions.indexOf(p) < 0; });
+    if (need.length) { fatal = "Missing permissions: " + need.join(", ") + ".\nEnable them in the widget properties (Permissions)."; paint(); return; }
+    oc.chat.on("message", onMessage);
+    oc.chat.on("status", function (s) { lines.chat = "chat: " + (s.connected ? "connected" : "disconnected" + (s.error ? " (" + s.error + ")" : "")); paint(); });
+    return oc.chat.subscribe(cfg.channel ? { channel: cfg.channel } : {}).then(function (r) {
+      lines.chat = "chat: #" + r.channel + (info.preview ? " (editor preview: replies are disabled)" : ""); paint();
+    });
+  }).catch(function (e) {
+    fatal = oc.hosted ? "Overlay Composer error: " + e.message : "Open this widget inside Overlay Composer.";
+    paint();
+  });
+
+  paint();
+  connectTosu();
+})();
+</script>
+</body>
+</html>

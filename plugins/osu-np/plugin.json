@@ -1,0 +1,31 @@
+{
+  "id": "osu-np",
+  "name": "osu! !np command",
+  "version": "1.0.0",
+  "description": "Отвечает в чате Twitch на команду !np ссылкой на карту osu!, которая сейчас выбрана/играется (данные берёт из tosu).",
+  "author": "compico",
+  "permissions": ["chat.read", "chat.send"],
+  "defaultSize": { "width": 360, "height": 80 },
+  "settings": [
+    { "key": "channel", "label": "Twitch channel", "type": "string", "group": "Chat", "help": "Пусто — канал аккаунта Стримера из настроек OC" },
+    { "key": "command", "label": "Command", "type": "string", "group": "Chat", "default": "!np" },
+    { "key": "who", "label": "Who can use it", "type": "select", "group": "Chat", "default": "everyone",
+      "options": [
+        { "value": "everyone", "label": "everyone" },
+        { "value": "sub", "label": "subscribers and above" },
+        { "value": "vip", "label": "VIPs and above" },
+        { "value": "mod", "label": "moderators and the broadcaster" }
+      ] },
+    { "key": "cooldownSeconds", "label": "Cooldown, seconds", "type": "number", "group": "Chat", "default": 15, "min": 0, "max": 600, "help": "Общая пауза между ответами, чтобы чат не засыпали" },
+    { "key": "replyToUser", "label": "Reply to the user's message", "type": "bool", "group": "Chat", "default": true },
+
+    { "key": "template", "label": "Message", "type": "string", "group": "Message", "default": "{artist} - {title} [{version}] {url}",
+      "help": "Подстановки: {artist} {title} {version} {mapper} {stars} {id} {set} {url} {user}" },
+    { "key": "unsubmittedText", "label": "Map is not on osu!", "type": "string", "group": "Message", "default": "This map is not on osu! (unsubmitted or local)" },
+    { "key": "offlineText", "label": "tosu is not reachable", "type": "string", "group": "Message", "default": "Can't read the current map right now (tosu is not running)" },
+
+    { "key": "tosuHost", "label": "tosu address", "type": "string", "group": "tosu", "default": "127.0.0.1:24050", "help": "host:port, где запущен tosu" },
+
+    { "key": "showStatus", "label": "Show status on the widget", "type": "bool", "group": "Debug", "default": false, "help": "Для проверки: подключение к tosu, текущая карта, последние команды" }
+  ]
+}

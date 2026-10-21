@@ -1,0 +1,10 @@
+{
+  "name": "oc-plugins",
+  "private": true,
+  "description": "Плагины для Overlay Composer",
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "test": "node scripts/validate.mjs && node --test"
+  },
+  "license": "MIT"
+}
