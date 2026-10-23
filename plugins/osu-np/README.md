@@ -6,7 +6,7 @@
 Camellia - Exit This Earth's Atomosphere [Evolution] https://osu.ppy.sh/beatmaps/1234567
 ```
 
-Карту плагин узнаёт у [tosu](https://github.com/KotRikD/tosu) (`ws://<адрес>/websocket/v2`), поэтому tosu должен быть запущен на том же компьютере, что и OBS
+Карту плагин узнаёт у [tosu](https://github.com/KotRikD/tosu) (`http://<адрес>/json/v2`, запрос делает сервер OC — разрешение `net.local`), поэтому tosu должен быть запущен на том же компьютере, что и OBS
 (или быть доступен по сети — адрес задаётся в настройках).
 
 ## Что нужно
