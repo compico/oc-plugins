@@ -1,10 +1,10 @@
 {
   "id": "osu-np",
   "name": "osu! !np command",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Отвечает в чате Twitch на команду !np ссылкой на карту osu!, которая сейчас выбрана/играется (данные берёт из tosu).",
   "author": "compico",
-  "permissions": ["chat.read", "chat.send"],
+  "permissions": ["chat.read", "chat.send", "net.local"],
   "defaultSize": { "width": 360, "height": 80 },
   "settings": [
     { "key": "channel", "label": "Twitch channel", "type": "string", "group": "Chat", "help": "Пусто — канал аккаунта Стримера из настроек OC" },

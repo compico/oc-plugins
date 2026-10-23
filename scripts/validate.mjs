@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 const ROOT = new URL("../plugins/", import.meta.url).pathname;
 const TYPES = new Set(["string", "text", "number", "range", "bool", "color", "font", "select"]);
-const PERMS = new Set(["chat.read", "chat.send", "storage"]);
+const PERMS = new Set(["chat.read", "chat.send", "storage", "net.local"]);
 const errors = [];
 const err = (plugin, msg) => errors.push(`${plugin}: ${msg}`);
 
