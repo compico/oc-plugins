@@ -1,0 +1,27 @@
+{
+  "id": "fps-meter",
+  "name": "FPS / frame time meter",
+  "version": "1.0.0",
+  "description": "Показывает частоту кадров и время кадра страницы оверлея (среднее, p95, максимум, пропущенные кадры) и график. Чтобы понять, какой виджет «просаживает» оверлей в OBS.",
+  "author": "compico",
+  "permissions": [],
+  "defaultSize": { "width": 360, "height": 170 },
+  "settings": [
+    { "key": "target", "label": "Target frame rate", "type": "select", "group": "Measure", "default": "auto",
+      "options": [
+        { "value": "auto", "label": "auto (nearest standard rate)" },
+        { "value": "30", "label": "30" },
+        { "value": "60", "label": "60" },
+        { "value": "120", "label": "120" },
+        { "value": "144", "label": "144" },
+        { "value": "240", "label": "240" }
+      ],
+      "help": "Частоту задаёт OBS (Custom frame rate у Browser Source) или монитор в обычном браузере. От неё считаются «медленные» и «пропущенные» кадры." },
+    { "key": "windowSeconds", "label": "Window, seconds", "type": "number", "group": "Measure", "default": 5, "min": 1, "max": 30, "help": "За какое время считать статистику и сколько показывать на графике" },
+    { "key": "showLag", "label": "Show timer lag", "type": "bool", "group": "Measure", "default": true, "help": "Насколько опаздывает таймер внутри самого виджета (занятость его процесса)" },
+    { "key": "showGraph", "label": "Show graph", "type": "bool", "group": "Look", "default": true },
+    { "key": "fontSize", "label": "Font size, px", "type": "number", "group": "Look", "default": 14, "min": 8, "max": 48 },
+    { "key": "textColor", "label": "Text color", "type": "color", "group": "Look", "default": "#ffffff" },
+    { "key": "bgOpacity", "label": "Background opacity, %", "type": "number", "group": "Look", "default": 55, "min": 0, "max": 100 }
+  ]
+}
