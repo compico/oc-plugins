@@ -9,6 +9,29 @@ const PERMS = new Set(["chat.read", "chat.send", "storage", "net.local"]);
 const errors = [];
 const err = (plugin, msg) => errors.push(`${plugin}: ${msg}`);
 
+// netLocal: какие локальные программы и пути доступны плагину (разрешение net.local); правила как в OC (internal/localnet).
+function checkNetLocal(dir, m) {
+  const rules = m.netLocal;
+  if (rules === undefined) return;
+  if (!Array.isArray(rules) || rules.length > 8) { err(dir, "netLocal — массив до 8 правил"); return; }
+  if (!(m.permissions ?? []).includes("net.local")) err(dir, "netLocal требует разрешение net.local");
+  rules.forEach((r, i) => {
+    const where = `netLocal[${i}]`;
+    if (Boolean(r?.target) === Boolean(r?.setting)) err(dir, `${where}: нужно ровно одно из target / setting`);
+    if (r?.target && !/^(127\.0\.0\.1|localhost|\[::1\]):\d{1,5}$/i.test(r.target)) err(dir, `${where}: target — loopback host:port`);
+    if (r?.setting) {
+      const s = (m.settings ?? []).find((x) => x.key === r.setting);
+      if (!s || s.type !== "string") err(dir, `${where}: setting "${r.setting}" должна быть строковой настройкой плагина`);
+    }
+    if (!Array.isArray(r?.paths) || r.paths.length < 1 || r.paths.length > 16) { err(dir, `${where}: paths — 1–16 префиксов`); return; }
+    for (const p of r.paths) {
+      let dec = p;
+      try { dec = decodeURIComponent(String(p)); } catch { err(dir, `${where}: путь ${p} не раскодируется`); continue; }
+      if (typeof p !== "string" || !p.startsWith("/") || p.startsWith("//") || /[\s\\]/.test(p) || dec.split("/").includes("..")) err(dir, `${where}: недопустимый путь ${JSON.stringify(p)}`);
+    }
+  });
+}
+
 // changelog.json (необязателен): [{ "version", "date"?, "changes"?: [строки], "migration"?: "что сделать после обновления" }].
 // OC показывает записи новее установленной версии в центре уведомлений при выходе обновления.
 function checkChangelog(dir, m) {
@@ -48,6 +71,7 @@ for (const dir of readdirSync(ROOT).filter((d) => statSync(join(ROOT, d)).isDire
   for (const p of m.permissions ?? []) if (!PERMS.has(p)) err(dir, `неизвестное разрешение "${p}"`);
   if (new Set(m.permissions ?? []).size !== (m.permissions ?? []).length) err(dir, "разрешения повторяются");
 
+  checkNetLocal(dir, m);
   checkChangelog(dir, m);
 
   const seen = new Set();
