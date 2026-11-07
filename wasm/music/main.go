@@ -1,0 +1,98 @@
+// Плагин «music» — заявки на треки из Яндекс Музыки за баллы канала Twitch.
+//
+// Зритель погашает награду и вставляет ссылку на трек; плагин ставит заявку в очередь, аддон плеера (PulseSync) забирает
+// её маршрутом GET /next, запускает трек и подтверждает POST /started (или POST /failed). Награда на Twitch выполняется
+// или отменяется (баллы возвращаются) автоматически.
+//
+// Сборка: GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o music.wasm .
+package main
+
+import (
+	"encoding/json"
+	"net/http"
+	"time"
+
+	"github.com/compico/overlaycomposer/pkg/ocplugin"
+)
+
+const version = "0.1.0"
+
+// sdkEnv подключает очередь к хосту через SDK.
+type sdkEnv struct{}
+
+func (sdkEnv) Load() (state, error) {
+	s, _, err := ocplugin.Load[state](stateKey)
+	return s, err
+}
+
+func (sdkEnv) Save(s state) error { return ocplugin.Store(stateKey, s) }
+
+func (sdkEnv) Complete(rewardID, redemptionID string, ok bool) error {
+	if ok {
+		return ocplugin.FulfillRedemption(rewardID, redemptionID)
+	}
+	return ocplugin.CancelRedemption(rewardID, redemptionID)
+}
+
+func (sdkEnv) Log(level, msg string, kv ...any) {
+	switch level {
+	case "error":
+		ocplugin.Error(msg, kv...)
+	case "warn":
+		ocplugin.Warn(msg, kv...)
+	default:
+		ocplugin.Info(msg, kv...)
+	}
+}
+
+// rawBody отдаёт тело запроса как есть; пустое тело — nil (обработчики очереди ответят 400).
+func rawBody(c *ocplugin.Ctx) json.RawMessage {
+	var raw json.RawMessage
+	if err := c.Bind(&raw); err != nil {
+		return nil
+	}
+	return raw
+}
+
+func reply(c *ocplugin.Ctx, r Response) error {
+	if r.Status == 0 {
+		r.Status = http.StatusOK
+	}
+	return c.JSON(r.Status, r.Body)
+}
+
+func init() {
+	p := ocplugin.New(ocplugin.Meta{
+		ID: "music", Name: "Заявки на треки", Version: version, Author: "compico",
+		Description: "Заявки на треки Яндекс Музыки за баллы канала: очередь и выдача плееру. Награда выполняется или отменяется сама.",
+		Permissions: []string{ocplugin.PermStorage, ocplugin.PermRedeem},
+		ConfigSchema: map[string]any{
+			"rewardId": map[string]any{
+				"type": "string", "format": "twitch.reward", "title": "Награда для заявок",
+				"description": "Погашения этой награды считаются заявками на трек. Награда должна быть создана приложением OC, иначе Twitch не даст менять её статус.",
+			},
+		},
+	})
+	q := &Queue{Env: sdkEnv{}, Now: time.Now}
+	p.OnInit(func() error {
+		var cfg Config
+		if err := p.Config(&cfg); err != nil {
+			return err
+		}
+		q.Cfg = cfg
+		return nil
+	})
+	p.OnRedemption(func(r ocplugin.Redemption) {
+		user := r.UserName
+		if user == "" {
+			user = r.UserLogin
+		}
+		q.OnRedemption(Redemption{ID: r.ID, RewardID: r.RewardID, User: user, Input: r.Input})
+	})
+	p.GET("/next", func(c *ocplugin.Ctx) error { return reply(c, q.Next()) })
+	p.GET("/queue", func(c *ocplugin.Ctx) error { return reply(c, q.List()) })
+	p.POST("/started", func(c *ocplugin.Ctx) error { return reply(c, q.Started(rawBody(c))) })
+	p.POST("/failed", func(c *ocplugin.Ctx) error { return reply(c, q.Failed(rawBody(c))) })
+}
+
+func main() {}
