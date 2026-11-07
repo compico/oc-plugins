@@ -19,3 +19,43 @@ jobs:
           node-version: 22
       - name: Манифесты и тесты логики плагинов
         run: npm test
+
+  wasm:
+    # Серверные wasm-плагины (wasm/<id>/): на PR собираются и проверяются только изменённые, на main/ручном запуске — все.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # для git diff относительно base и проверки тегов релизов
+          fetch-tags: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: wasm/*/go.sum
+      - name: Какие плагины собирать
+        id: pick
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch -q origin "${{ github.base_ref }}"
+            changed=$(node scripts/wasm.mjs changed "origin/${{ github.base_ref }}")
+            echo "build=$(echo "$changed" | jq -r '.changed | join(" ")')" >> "$GITHUB_OUTPUT"
+            echo "code=$(echo "$changed" | jq -r '.code | join(" ")')" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=$(node scripts/wasm.mjs ids | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+            echo "code=" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Сборка (vet, тесты, wasm, метаданные из oc_meta)
+        if: steps.pick.outputs.build != ''
+        run: node scripts/wasm.mjs build ${{ steps.pick.outputs.build }}
+      - name: Версия поднята, если менялся код
+        if: steps.pick.outputs.code != ''
+        run: |
+          for id in ${{ steps.pick.outputs.code }}; do node scripts/wasm.mjs check-bump "$id"; done
+      - uses: actions/upload-artifact@v4
+        if: steps.pick.outputs.build != ''
+        with:
+          name: wasm-plugins
+          path: dist/

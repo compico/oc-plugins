@@ -1,0 +1,61 @@
+name: Release wasm plugins
+
+# При пуше в main собирает изменившиеся wasm-плагины (wasm/<id>/) и выпускает релиз <id>-v<version> с файлом <id>.wasm,
+# если такого тега ещё нет. Бинарники в репозитории не хранятся: готовый .wasm лежит только в Releases.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # ручной запуск: пересобрать и выпустить всё, чему не хватает релиза
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-wasm
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: wasm/*/go.sum
+      - name: Какие плагины собирать
+        id: pick
+        run: |
+          before="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ]; then
+            ids=$(node scripts/wasm.mjs changed "$before" | jq -r '.code | join(" ")')
+          else
+            ids=$(node scripts/wasm.mjs ids | tr '\\n' ' ')
+          fi
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+      - name: Сборка и релиз
+        if: steps.pick.outputs.ids != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for id in ${{ steps.pick.outputs.ids }}; do
+            node scripts/wasm.mjs build "$id"
+            version=$(jq -r .version "dist/$id.json")
+            tag="$id-v$version"
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "$tag уже выпущен — пропускаю"
+              continue
+            fi
+            sha=$(jq -r .sha256 "dist/$id.json")
+            title=$(jq -r '.meta.name' "dist/$id.json")
+            desc=$(jq -r '.meta.description // ""' "dist/$id.json")
+            notes=$(printf '%s\\n\\n**Установка:** скачайте `%s.wasm` и положите в папку `ocplugs` рядом с Overlay Composer (или в папку `ocplugs` профиля), затем перезапустите OC или нажмите «Перечитать». Плагин запросит разрешения: %s.\\n\\nsha256: `%s`' \\
+              "$desc" "$id" "$(jq -r '(.meta.permissions // []) | map("`"+.+"`") | join(", ")' "dist/$id.json")" "$sha")
+            gh release create "$tag" "dist/$id.wasm" "dist/$id.wasm.sha256" --title "$title $version" --notes "$notes" --target "$GITHUB_SHA"
+          done
