@@ -32,6 +32,9 @@ func (f *fakeEnv) Save(s state) error {
 	if f.saveErr != nil {
 		return f.saveErr
 	}
+	if b, _ := json.Marshal(s); len(b) > 256<<10 { // лимит значения в хранилище OC
+		return errors.New("value must be valid JSON up to 256 KB")
+	}
 	f.st = s
 	return nil
 }
@@ -193,6 +196,37 @@ func TestQueueLimitAndPruning(t *testing.T) {
 	}
 	if s2.Items[0].RedemptionID != "live" || s2.Items[0].Status != statusQueued {
 		t.Fatalf("живая заявка не должна срезаться: %+v", s2.Items[0])
+	}
+}
+
+// Регрессия: «тяжёлые» заявки (символы, которые JSON экранирует в 6 байт) не должны упереть состояние в лимит хранилища.
+func TestHeavyHistoryNeverBlocksTheQueue(t *testing.T) {
+	q, e := newQ()
+	q.OnRedemption(red("live", link(1)))
+	heavy := strings.Repeat("<", 2000) // ввод зрителя до 2 КБ и больше
+	for i := 0; i < 400; i++ {
+		q.OnRedemption(red(fmt.Sprintf("h%d", i), heavy))
+	}
+	s, _ := e.Load()
+	if b, _ := json.Marshal(s); len(b) > maxBytes {
+		t.Fatalf("состояние %d байт > бюджета %d", len(b), maxBytes)
+	}
+	if s.Items[0].RedemptionID != "live" {
+		t.Fatal("живая заявка не должна срезаться")
+	}
+	for _, it := range s.Items {
+		if len([]rune(it.Input)) > maxInput {
+			t.Fatalf("ввод не обрезан: %d", len([]rune(it.Input)))
+		}
+	}
+	// и очередь продолжает работать: новая заявка принимается и выдаётся
+	q.OnRedemption(red("after", link(2)))
+	if it, _ := next(t, q); it == nil || it.RedemptionID != "live" {
+		t.Fatalf("%+v", it)
+	}
+	q.Started(body(1))
+	if it, _ := next(t, q); it == nil || it.RedemptionID != "after" {
+		t.Fatalf("очередь встала: %+v", it)
 	}
 }
 

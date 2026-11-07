@@ -21,9 +21,10 @@ const (
 )
 
 const (
-	maxQueued  = 100 // заявок в ожидании: дальше новые отклоняются
-	maxKept    = 200 // сколько заявок помним (дедупликация повторных доставок + история)
-	maxInput   = 500 // сколько символов ввода зрителя храним
+	maxQueued  = 100       // заявок в ожидании: дальше новые отклоняются
+	maxKept    = 200       // сколько заявок помним (дедупликация повторных доставок + история)
+	maxInput   = 200       // сколько символов ввода зрителя храним (для показа; ссылка разбирается из полного ввода)
+	maxBytes   = 200 << 10 // бюджет состояния: у значения в хранилище OC лимит 256 КБ, держим запас
 	maxReason  = 200
 	stateKey   = "state"
 	storeError = "storage error"
@@ -87,20 +88,30 @@ type Queue struct {
 	Now func() time.Time
 }
 
+func size(s state) int {
+	b, _ := json.Marshal(s)
+	return len(b)
+}
+
+// prune держит состояние в пределах maxKept заявок и maxBytes байт: срезаются самые старые завершённые, живые заявки
+// (ожидающие и отданные) не трогаются. Без ограничения по байтам история из «тяжёлых» заявок (JSON экранирует «<» как
+// \u003c — 6 байт на символ) упёрлась бы в лимит хранилища, запись начала бы падать, а срезание идёт только при записи —
+// очередь встала бы насовсем.
 func prune(s state) state {
-	if len(s.Items) <= maxKept {
-		return s
-	}
-	drop := len(s.Items) - maxKept
-	kept := make([]Item, 0, maxKept)
-	for _, it := range s.Items { // срезаем самые старые завершённые; живые заявки не трогаем
-		if drop > 0 && it.Status != statusQueued && it.Status != statusSent {
-			drop--
-			continue
+	live := func(it Item) bool { return it.Status == statusQueued || it.Status == statusSent }
+	dropOldestDone := func() bool {
+		for i, it := range s.Items {
+			if !live(it) {
+				s.Items = append(s.Items[:i:i], s.Items[i+1:]...)
+				return true
+			}
 		}
-		kept = append(kept, it)
+		return false
 	}
-	s.Items = kept
+	for len(s.Items) > maxKept && dropOldestDone() {
+	}
+	for size(s) > maxBytes && dropOldestDone() {
+	}
 	return s
 }
 
