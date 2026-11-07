@@ -35,8 +35,12 @@ jobs:
           before="${{ github.event.before }}"
           if [ "${{ github.event_name }}" = "push" ] && [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ]; then
             ids=$(node scripts/wasm.mjs changed "$before" | jq -r '.code | join(" ")')
+            # изменился сам выпуск или сборка — пересобираем всё: релиз с недостающим тегом создастся, существующие пропустятся
+            if git diff --name-only "$before"...HEAD | grep -qE '^(\.github/workflows/release-wasm\.yml|scripts/wasm\.mjs)$'; then
+              ids=$(node scripts/wasm.mjs ids | tr '\n' ' ')
+            fi
           else
-            ids=$(node scripts/wasm.mjs ids | tr '\\n' ' ')
+            ids=$(node scripts/wasm.mjs ids | tr '\n' ' ')
           fi
           echo "ids=$ids" >> "$GITHUB_OUTPUT"
       - name: Сборка и релиз
@@ -55,7 +59,11 @@ jobs:
             sha=$(jq -r .sha256 "dist/$id.json")
             title=$(jq -r '.meta.name' "dist/$id.json")
             desc=$(jq -r '.meta.description // ""' "dist/$id.json")
-            notes=$(printf '%s\\n\\n**Установка:** скачайте `%s.wasm` и положите в папку `ocplugs` рядом с Overlay Composer (или в папку `ocplugs` профиля), затем перезапустите OC или нажмите «Перечитать». Плагин запросит разрешения: %s.\\n\\nsha256: `%s`' \\
-              "$desc" "$id" "$(jq -r '(.meta.permissions // []) | map("`"+.+"`") | join(", ")' "dist/$id.json")" "$sha")
-            gh release create "$tag" "dist/$id.wasm" "dist/$id.wasm.sha256" --title "$title $version" --notes "$notes" --target "$GITHUB_SHA"
+            perms=$(jq -r '(.meta.permissions // []) | map("`" + . + "`") | join(", ")' "dist/$id.json")
+            {
+              printf '%s\n\n' "$desc"
+              printf '**Установка:** скачайте `%s.wasm` и положите в папку `ocplugs` рядом с Overlay Composer (или в папку `ocplugs` профиля), затем перезапустите OC или нажмите «Перечитать». Плагин запросит разрешения: %s.\n\n' "$id" "$perms"
+              printf 'sha256: `%s`\n' "$sha"
+            } > "dist/$id.notes.md"
+            gh release create "$tag" "dist/$id.wasm" "dist/$id.wasm.sha256" --title "$title $version" --notes-file "dist/$id.notes.md" --target "$GITHUB_SHA"
           done
