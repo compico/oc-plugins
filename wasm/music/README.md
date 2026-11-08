@@ -11,7 +11,7 @@
 
 1. Скачайте `music.wasm` со [страницы релизов](https://github.com/compico/oc-plugins/releases) (теги `music-v<версия>`).
    Если нужно проверить файл — рядом лежит `music.wasm.sha256`.
-2. Положите его в папку `ocplugs` рядом с Overlay Composer (или в `ocplugs` профиля) и перезапустите OC.
+2. Положите его в папку плагинов Overlay Composer — рядом с обычными плагинами (её открывает «Open folder» в окне «Standalone plugins…») — и нажмите «Rescan» там же.
 3. Откройте в редакторе «Plugin store… → Standalone plugins…», найдите «Заявки на треки» и:
    - отметьте разрешения `storage` и `twitch.redemption`;
    - в настройках выберите награду из списка или нажмите «New reward…» и создайте её прямо там (название, цена, подсказка зрителю), затем «Save settings».

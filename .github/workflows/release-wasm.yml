@@ -62,7 +62,7 @@ jobs:
             perms=$(jq -r '(.meta.permissions // []) | map("`" + . + "`") | join(", ")' "dist/$id.json")
             {
               printf '%s\n\n' "$desc"
-              printf '**Установка:** скачайте `%s.wasm` и положите в папку `ocplugs` рядом с Overlay Composer (или в папку `ocplugs` профиля), затем перезапустите OC или нажмите «Перечитать». Плагин запросит разрешения: %s.\n\n' "$id" "$perms"
+              printf '**Установка:** скачайте `%s.wasm` и положите в папку плагинов Overlay Composer (рядом с обычными плагинами; кнопка «Open folder» в окне «Standalone plugins…» её открывает), затем нажмите «Rescan» там же или перезапустите OC. Плагин запросит разрешения: %s.\n\n' "$id" "$perms"
               printf 'sha256: `%s`\n' "$sha"
             } > "dist/$id.notes.md"
             gh release create "$tag" "dist/$id.wasm" "dist/$id.wasm.sha256" --title "$title $version" --notes-file "dist/$id.notes.md" --target "$GITHUB_SHA"
