@@ -10,16 +10,16 @@
 | [`osu-np`](plugins/osu-np) | на `!np` отвечает в чате ссылкой на текущую карту osu! (данные из tosu) | `chat.read`, `chat.send`, `net.local` |
 | [`fps-meter`](plugins/fps-meter) | FPS и время кадра страницы оверлея (avg/p95/max, пропущенные кадры, график) — чтобы найти виджет, «просаживающий» оверлей в OBS | — |
 
-### Серверные плагины (wasm)
+### Автономные плагины (standalone, wasm)
 
 Работают на сервере OC, без окна и iframe: отвечают на HTTP-запросы, получают события (например, награды Twitch), хранят данные.
 Один `.wasm`-файл, исходники — в [`wasm/<id>/`](wasm), готовые файлы — в [Releases](https://github.com/compico/oc-plugins/releases) (в репозитории бинарников нет).
 
 | Плагин | Что делает | Разрешения |
 |---|---|---|
-| [`music`](wasm/music) | заявки на треки Яндекс Музыки за баллы канала: очередь, выдача аддону плеера, выполнение/отмена награды | `storage`, `twitch.redemption` |
+| [`music`](wasm/music) | заявки на треки Яндекс Музыки за баллы канала: очередь, выдача аддону плеера, выполнение/отмена награды; виджет очереди | `storage`, `twitch.redemption` |
 
-Установка: скачайте `<id>.wasm` из релиза `<id>-v<версия>`, положите в папку `ocplugs` рядом с Overlay Composer, перезапустите OC и выдайте плагину разрешения.
+Установка: скачайте `<id>.wasm` из релиза `<id>-v<версия>`, положите в папку `ocplugs` рядом с Overlay Composer, перезапустите OC и выдайте плагину разрешения в «Plugin store… → Standalone plugins…».
 Устройство плагинов — [`docs/WASM_PLUGINS.md`](https://github.com/compico/overlaycomposer/blob/main/docs/WASM_PLUGINS.md); SDK для Go — [`pkg/ocplugin`](https://github.com/compico/overlaycomposer/tree/main/pkg/ocplugin).
 
 ## Установка HTML-плагина
@@ -39,7 +39,7 @@
 - Структура плагина: `plugins/<id>/plugin.json` (id = имя папки), `index.html` (точка входа), остальные файлы — что нужно виджету, `README.md`.
 - Журнал изменений — `plugins/<id>/changelog.json`: `[{ "version": "1.2.0", "date": "2026-10-27", "changes": ["что нового"], "migration": "что сделать после обновления" }]`. При выходе новой версии Overlay Composer покажет пользователю записи новее его версии (в центре уведомлений). В файле должна быть запись для текущей `version`; `migration` пишите, только если после обновления нужны действия (новое поле, право, переименованная настройка).
 - Логику, не связанную с DOM и сетью, выносите в отдельный файл и тестируйте (пример: `plugins/osu-np/logic.js` и `test/osu-np.test.mjs`).
-- Серверный wasm-плагин: папка `wasm/<id>/` со своим `go.mod` (id = имя папки = `id` в `oc_meta`), см. [`wasm/music`](wasm/music). Проверка и сборка: `node scripts/wasm.mjs build <id>` (нужны Go 1.24+ и Node.js). Новая версия — поднять `version` в коде: после merge в `main` CI выпустит релиз `<id>-v<версия>`; если менялся код, а версия прежняя, CI на PR подскажет.
+- Автономный wasm-плагин: папка `wasm/<id>/` со своим `go.mod` (id = имя папки = `id` в `oc_meta`), см. [`wasm/music`](wasm/music). Если есть папка `ui/` — это интерфейс виджетов (объявляются в `Meta.Widgets`): при сборке `ocpack` упаковывает его в сам `.wasm` (при первой сборке ставится из overlaycomposer@`OCPACK_REF`, нужен доступ к сети; или задайте `OCPACK=<путь к ocpack>`). Проверка и сборка: `node scripts/wasm.mjs build <id>` (нужны Go 1.24+ и Node.js). Новая версия — поднять `version` в коде: после merge в `main` CI выпустит релиз `<id>-v<версия>`; если менялся код, а версия прежняя, CI на PR подскажет.
 - Перед коммитом: `npm test` — проверяет манифесты (`scripts/validate.mjs`) и запускает тесты (нужен только Node.js, зависимостей нет).
 
 ## Лицензия

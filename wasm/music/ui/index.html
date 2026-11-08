@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Очередь треков</title>
+<style>
+  html, body { margin: 0; background: transparent; font: 18px/1.3 system-ui, "Segoe UI", sans-serif; color: #fff; }
+  #root { padding: 8px; display: grid; gap: 6px; }
+  h1 { margin: 0 0 2px; font-size: 14px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #ffffffb0; }
+  .item { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: baseline; padding: 6px 10px; border-radius: 8px; background: #000000a0; }
+  .item.now { background: #7c3aedcc; }
+  .n { color: #ffffff90; font-variant-numeric: tabular-nums; min-width: 1.4em; text-align: right; }
+  .who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .what { color: #ffffffc0; font-size: 14px; }
+  .empty, .err { padding: 6px 10px; border-radius: 8px; background: #000000a0; color: #ffffffa0; font-size: 14px; }
+  .err { color: #fca5a5; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="/plugin-sdk/oc.js"></script>
+<script>
+// Ввод зрителей — недоверенный текст: в DOM он попадает только через textContent.
+const root = document.getElementById("root");
+const SHOW = 6; // сколько ожидающих показывать
+
+function node(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function row(n, it, now) {
+  const e = node("div", "item" + (now ? " now" : ""));
+  e.append(node("span", "n", n), node("span", "who", it.user || "—"), node("span", "what", it.trackId ? `трек ${it.trackId}` : ""));
+  return e;
+}
+
+function render(items) {
+  const live = items.filter((i) => i.status === "sent");
+  const queued = items.filter((i) => i.status === "queued");
+  const kids = [node("h1", "", "Очередь треков")];
+  if (!live.length && !queued.length) kids.push(node("div", "empty", "Очередь пуста"));
+  for (const it of live) kids.push(row("▶", it, true));
+  queued.slice(0, SHOW).forEach((it, i) => kids.push(row(String(i + 1), it, false)));
+  if (queued.length > SHOW) kids.push(node("div", "empty", `…и ещё ${queued.length - SHOW}`));
+  root.replaceChildren(...kids);
+}
+
+async function tick() {
+  try {
+    const r = await oc.plugin.get("/queue");
+    if (r.status !== 200 || !r.body || !Array.isArray(r.body.items)) throw new Error("status " + r.status);
+    render(r.body.items);
+  } catch (e) {
+    root.replaceChildren(node("div", "err", "Плагин не отвечает"));
+  }
+}
+
+oc.ready.then(() => { tick(); setInterval(tick, 3000); }, () => root.replaceChildren(node("div", "err", "Откройте виджет через Overlay Composer")));
+</script>
+</body>
+</html>

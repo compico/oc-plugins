@@ -1,3 +1,4 @@
+.tools/
+/wasm/*/*.wasm
 dist/
 node_modules/
-/wasm/*/*.wasm
