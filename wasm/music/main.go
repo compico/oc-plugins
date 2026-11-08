@@ -15,7 +15,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 // sdkEnv подключает очередь к хосту через SDK.
 type sdkEnv struct{}
@@ -66,6 +66,8 @@ func init() {
 		ID: "music", Name: "Заявки на треки", Version: version, Author: "compico",
 		Description: "Заявки на треки Яндекс Музыки за баллы канала: очередь и выдача плееру. Награда выполняется или отменяется сама.",
 		Permissions: []string{ocplugin.PermStorage, ocplugin.PermRedeem},
+		// Интерфейс лежит в ui/ и упаковывается в .wasm при сборке (ocpack).
+		Widgets: []ocplugin.Widget{{ID: "queue", Name: "Очередь треков", Entry: "index.html", Width: 420, Height: 360}},
 		ConfigSchema: map[string]any{
 			"rewardId": map[string]any{
 				"type": "string", "format": "twitch.reward", "title": "Награда для заявок",

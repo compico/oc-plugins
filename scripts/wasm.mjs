@@ -72,7 +72,54 @@ export function checkMeta(id, m) {
 
 function run(cmd, args, opts) {
   const r = spawnSync(cmd, args, { stdio: "inherit", ...opts });
+  if (r.error?.code === "ENOENT") throw new Error(`${cmd}: программа не найдена`);
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(" ")}: код ${r.status}`);
+}
+
+// ---- статика (виджеты): папка wasm/<id>/ui упаковывается в сам .wasm утилитой ocpack из Overlay Composer ----
+
+/** Ревизия overlaycomposer, из которой берётся ocpack. Менять осознанно: формат секции oc.assets версионируется ревизией. */
+export const OCPACK_REF = "4eb6541b0d2b7dcc2b464205f5870496ce37b853";
+const TOOLS = join(ROOT, ".tools", "bin");
+
+/** Файлы папки ui относительно неё (через «/»), без скрытых; null — папки нет. */
+export function listUI(dir) {
+  if (!existsSync(dir)) return null;
+  const out = new Set();
+  const walk = (d, rel) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.name.startsWith(".")) continue;
+      if (e.isDirectory()) walk(join(d, e.name), `${rel}${e.name}/`);
+      else out.add(`${rel}${e.name}`);
+    }
+  };
+  walk(dir, "");
+  return out;
+}
+
+/** Согласованность виджетов в метаданных и папки ui. files — результат listUI (null, если папки нет). */
+export function checkWidgets(meta, files) {
+  const e = [];
+  const widgets = meta.widgets ?? [];
+  if (widgets.length && !files) e.push("виджеты объявлены, а папки ui/ нет");
+  if (files && !widgets.length) e.push("папка ui/ есть, но виджеты в oc_meta не объявлены (Meta.Widgets)");
+  for (const w of widgets) if (files && !files.has(w.entry)) e.push(`виджет «${w.id}»: файла ui/${w.entry} нет`);
+  return e;
+}
+
+/** Путь к ocpack: переменная OCPACK, затем PATH, затем .tools/bin (установка из OCPACK_REF при первой надобности). */
+function ocpackPath() {
+  if (process.env.OCPACK) return process.env.OCPACK;
+  const exe = process.platform === "win32" ? "ocpack.exe" : "ocpack";
+  if (spawnSync("ocpack", ["list"], { stdio: "ignore" }).error?.code !== "ENOENT") return "ocpack";
+  const local = join(TOOLS, exe);
+  if (!existsSync(local)) {
+    console.log(`ocpack не найден — ставлю из overlaycomposer@${OCPACK_REF.slice(0, 12)} в .tools/bin`);
+    run("go", ["install", "-trimpath", `github.com/compico/overlaycomposer/cmd/ocpack@${OCPACK_REF}`], {
+      env: { ...process.env, GOBIN: TOOLS, CGO_ENABLED: "0" },
+    });
+  }
+  return local;
 }
 
 export async function build(id) {
@@ -86,8 +133,10 @@ export async function build(id) {
     cwd: dir,
     env: { ...process.env, GOOS: "wasip1", GOARCH: "wasm", CGO_ENABLED: "0" },
   });
+  const ui = listUI(join(dir, "ui"));
+  if (ui) run(ocpackPath(), ["pack", out, join(dir, "ui")]); // до метаданных и sha256: хеш считается от готового файла
   const meta = await readMeta(out);
-  const errs = checkMeta(id, meta);
+  const errs = [...checkMeta(id, meta), ...checkWidgets(meta, ui)];
   if (errs.length) throw new Error(`${id}: ${errs.join("; ")}`);
   const data = readFileSync(out);
   const info = { id, version: meta.version, sha256: createHash("sha256").update(data).digest("hex"), size: data.length, meta };
