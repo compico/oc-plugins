@@ -10,6 +10,8 @@ import (
 )
 
 type fakeEnv struct {
+	bans      []Ban
+	bansErr   error
 	st        state
 	loadErr   error
 	saveErr   error
@@ -36,6 +38,19 @@ func (f *fakeEnv) Save(s state) error {
 		return errors.New("value must be valid JSON up to 256 KB")
 	}
 	f.st = s
+	return nil
+}
+func (f *fakeEnv) LoadBans() ([]Ban, error) {
+	if f.bansErr != nil {
+		return nil, f.bansErr
+	}
+	return append([]Ban(nil), f.bans...), nil
+}
+func (f *fakeEnv) SaveBans(b []Ban) error {
+	if f.bansErr != nil {
+		return f.bansErr
+	}
+	f.bans = append([]Ban(nil), b...)
 	return nil
 }
 func (f *fakeEnv) Complete(_, id string, ok bool) error {
@@ -90,13 +105,17 @@ func TestFIFOPollingAndConfirmedStart(t *testing.T) {
 	if it, resend = next(t, q); it.ID != 2 || resend {
 		t.Fatalf("после старта первой — вторая: %+v", it)
 	}
-	if len(e.updates) != 1 || e.updates[0] != "r1:FULFILLED" {
-		t.Fatalf("%v", e.updates)
+	if len(e.updates) != 0 {
+		t.Fatalf("старт трека ещё не повод выполнять награду: %v", e.updates)
 	}
 	if it, _ = next(t, q); it == nil || it.ID != 2 {
 		t.Fatal("вторая всё ещё отдана и не подтверждена")
 	}
+	if r := q.Played(body(1)); r.Status != 200 || len(e.updates) != 1 || e.updates[0] != "r1:FULFILLED" {
+		t.Fatalf("после отыгрыша награда выполняется: %+v %v", r, e.updates)
+	}
 	q.Started(body(2))
+	q.Played(body(2))
 	if it, _ = next(t, q); it != nil {
 		t.Fatalf("очередь пуста: %+v", it)
 	}
@@ -139,8 +158,17 @@ func TestSadPaths(t *testing.T) {
 	}
 	next(t, q)
 	q.Started(body(1))
+	if r := q.Started(body(1)); r.Status != 200 {
+		t.Fatalf("повтор подтверждения старта безопасен: %d", r.Status)
+	}
+	if r := q.Played(body(1)); r.Status != 200 {
+		t.Fatalf("%d", r.Status)
+	}
+	if r := q.Played(body(1)); r.Status != 409 {
+		t.Fatalf("повторный «отыграно»: %d", r.Status)
+	}
 	if r := q.Started(body(1)); r.Status != 409 {
-		t.Fatalf("повторное подтверждение: %d", r.Status)
+		t.Fatalf("старт после отыгрыша: %d", r.Status)
 	}
 	if r := q.Failed(body(1)); r.Status != 409 {
 		t.Fatalf("ошибка после успеха: %d", r.Status)
@@ -287,12 +315,13 @@ func TestStorageFailures(t *testing.T) {
 	q3, e3 := newQ()
 	q3.OnRedemption(red("r1", link(1)))
 	next(t, q3)
+	q3.Started(body(1))
 	e3.saveErr = boom
-	if r := q3.Started(body(1)); r.Status != 500 || len(e3.updates) != 0 {
+	if r := q3.Played(body(1)); r.Status != 500 || len(e3.updates) != 0 {
 		t.Fatalf("%+v %v", r, e3.updates)
 	}
 	e3.saveErr = nil
-	if r := q3.Started(body(1)); r.Status != 200 || len(e3.updates) != 1 {
+	if r := q3.Played(body(1)); r.Status != 200 || len(e3.updates) != 1 {
 		t.Fatalf("повтор подтверждения должен пройти: %+v %v", r, e3.updates)
 	}
 }
@@ -302,7 +331,8 @@ func TestTwitchErrorDoesNotBreakQueue(t *testing.T) {
 	e.updateErr = errors.New("helix: 403")
 	q.OnRedemption(red("r1", link(1)))
 	next(t, q)
-	if r := q.Started(body(1)); r.Status != 200 {
+	q.Started(body(1))
+	if r := q.Played(body(1)); r.Status != 200 {
 		t.Fatalf("ошибка Twitch не должна ломать подтверждение: %+v", r)
 	}
 	if s, _ := e.Load(); s.Items[0].Status != statusPlayed {
