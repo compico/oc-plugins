@@ -15,7 +15,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.3.0"
+const version = "0.4.0"
 
 // sdkEnv подключает очередь к хосту через SDK.
 type sdkEnv struct{}
@@ -26,6 +26,13 @@ func (sdkEnv) Load() (state, error) {
 }
 
 func (sdkEnv) Save(s state) error { return ocplugin.Store(stateKey, s) }
+
+func (sdkEnv) LoadBans() ([]Ban, error) {
+	b, _, err := ocplugin.Load[[]Ban](bansKey)
+	return b, err
+}
+
+func (sdkEnv) SaveBans(b []Ban) error { return ocplugin.Store(bansKey, b) }
 
 func (sdkEnv) Complete(rewardID, redemptionID string, ok bool) error {
 	if ok {
@@ -70,6 +77,7 @@ func init() {
 		Widgets: []ocplugin.Widget{
 			{ID: "queue", Name: "Очередь треков", Entry: "index.html", Width: 420, Height: 360},
 			{ID: "player", Name: "Плеер с заявками", Entry: "player.html", Width: 460, Height: 400},
+			{ID: "control", Name: "Пульт плеера", Entry: "control.html", Width: 360, Height: 230},
 		},
 		ConfigSchema: map[string]any{
 			"rewardId": map[string]any{
@@ -80,6 +88,7 @@ func init() {
 	})
 	q := &Queue{Env: sdkEnv{}, Now: time.Now}
 	pl := &Player{Now: time.Now}
+	ctl := &Control{Now: time.Now}
 	p.OnInit(func() error {
 		var cfg Config
 		if err := p.Config(&cfg); err != nil {
@@ -99,7 +108,15 @@ func init() {
 	p.GET("/queue", func(c *ocplugin.Ctx) error { return reply(c, withNow(q.List(), pl.Get())) })
 	p.POST("/nowplaying", func(c *ocplugin.Ctx) error { return reply(c, pl.Set(rawBody(c))) })
 	p.POST("/started", func(c *ocplugin.Ctx) error { return reply(c, q.Started(rawBody(c))) })
+	p.POST("/played", func(c *ocplugin.Ctx) error { return reply(c, q.Played(rawBody(c))) })
 	p.POST("/failed", func(c *ocplugin.Ctx) error { return reply(c, q.Failed(rawBody(c))) })
+	p.GET("/playing", func(c *ocplugin.Ctx) error { return reply(c, q.Playing()) })
+	// Управление плеером: пульт (виджет) ставит команду, аддон забирает.
+	p.POST("/control", func(c *ocplugin.Ctx) error { return reply(c, ctl.Request(rawBody(c), q, pl.Get())) })
+	p.GET("/commands", func(c *ocplugin.Ctx) error { return reply(c, ctl.Pending()) })
+	p.POST("/commands/done", func(c *ocplugin.Ctx) error { return reply(c, ctl.Done(rawBody(c))) })
+	p.GET("/bans", func(c *ocplugin.Ctx) error { return reply(c, q.Bans()) })
+	p.POST("/unban", func(c *ocplugin.Ctx) error { return reply(c, q.Unban(rawBody(c))) })
 }
 
 func main() {}

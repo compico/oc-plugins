@@ -98,13 +98,13 @@ function renderNow(n) {
 
 function row(label, it, live) {
   const e = el("div", "row" + (live ? " live" : ""));
-  const what = live && now && now.trackId === it.trackId ? "играет" : live ? "запускается" : (it.trackId ? "трек " + it.trackId : "");
+  const what = it.status === "playing" ? "играет" : live ? "запускается" : (it.trackId ? "трек " + it.trackId : "");
   e.append(el("span", "n", label), el("span", "who", it.user || "—"), el("span", "what", what));
   return e;
 }
 
 function renderOrders(items) {
-  const live = items.filter((i) => i.status === "sent");
+  const live = items.filter((i) => i.status === "sent" || i.status === "playing");
   const queued = items.filter((i) => i.status === "queued");
   const kids = [el("h1", "", "Заявки")];
   if (!live.length && !queued.length) kids.push(el("div", "note", "Заказов пока нет"));

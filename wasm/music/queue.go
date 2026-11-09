@@ -15,8 +15,9 @@ import (
 const (
 	statusQueued   = "queued"   // принята, ждёт своей очереди
 	statusSent     = "sent"     // отдана аддону, подтверждения старта ещё нет
-	statusPlayed   = "played"   // аддон подтвердил запуск, награда выполнена
-	statusFailed   = "failed"   // аддон не смог запустить, награда отменена
+	statusPlaying  = "playing"  // трек начал играть; награда ещё не выполнена: ждём, пока он будет отыгран
+	statusPlayed   = "played"   // трек отыгран (не пропущен), награда выполнена
+	statusFailed   = "failed"   // не запустился или пропущен, награда отменена (баллы возвращены)
 	statusRejected = "rejected" // ссылка не подошла или очередь полна, награда отменена
 )
 
@@ -26,6 +27,9 @@ const (
 	maxInput   = 200       // сколько символов ввода зрителя храним (для показа; ссылка разбирается из полного ввода)
 	maxBytes   = 200 << 10 // бюджет состояния: у значения в хранилище OC лимит 256 КБ, держим запас
 	maxReason  = 200
+	maxBans    = 300 // сколько забаненных треков помним (отдельный ключ хранилища, не делит бюджет с очередью)
+	maxBanName = 80
+	bansKey    = "bans"
 	stateKey   = "state"
 	storeError = "storage error"
 )
@@ -64,10 +68,19 @@ type state struct {
 	Items  []Item `json:"items"`
 }
 
+// Ban — забаненный трек: заявки на него отклоняются, а награда возвращается зрителю.
+type Ban struct {
+	TrackID string `json:"trackId"`
+	Title   string `json:"title,omitempty"`
+	At      int64  `json:"at"`
+}
+
 // Env — всё, что очереди нужно от хоста. В плагине его реализует main.go поверх SDK, в тестах — фейк.
 type Env interface {
 	Load() (state, error)
 	Save(state) error
+	LoadBans() ([]Ban, error)
+	SaveBans([]Ban) error
 	// Complete меняет статус погашения на Twitch: ok — FULFILLED, иначе CANCELED (баллы возвращаются зрителю).
 	Complete(rewardID, redemptionID string, ok bool) error
 	Log(level, msg string, kv ...any)
@@ -98,7 +111,9 @@ func size(s state) int {
 // \u003c — 6 байт на символ) упёрлась бы в лимит хранилища, запись начала бы падать, а срезание идёт только при записи —
 // очередь встала бы насовсем.
 func prune(s state) state {
-	live := func(it Item) bool { return it.Status == statusQueued || it.Status == statusSent }
+	live := func(it Item) bool {
+		return it.Status == statusQueued || it.Status == statusSent || it.Status == statusPlaying
+	}
 	dropOldestDone := func() bool {
 		for i, it := range s.Items {
 			if !live(it) {
@@ -159,6 +174,8 @@ func (q *Queue) OnRedemption(r Redemption) {
 		it.Status, it.Error = statusRejected, "not a Yandex Music track link"
 	} else if queued >= maxQueued {
 		it.Status, it.Error = statusRejected, "the queue is full"
+	} else if q.isBanned(tr.TrackID) {
+		it.Status, it.Error = statusRejected, "the track is banned"
 	} else {
 		it.AlbumID, it.TrackID, it.URL = tr.AlbumID, tr.TrackID, tr.URL
 	}
@@ -210,13 +227,26 @@ type finishBody struct {
 	Reason string `json:"reason"`
 }
 
-// Started — аддон подтверждает, что трек запущен.
-func (q *Queue) Started(body json.RawMessage) Response { return q.finish(body, true) }
+// Жизненный цикл: queued → sent (GET /next) → playing (POST /started: трек начал играть) → played (POST /played: отыгран,
+// награда выполняется). POST /failed из queued/sent/playing отменяет награду — баллы возвращаются зрителю (не запустился, пропущен).
+type action int
 
-// Failed — аддон сообщает, что запустить трек не удалось.
-func (q *Queue) Failed(body json.RawMessage) Response { return q.finish(body, false) }
+const (
+	actStarted action = iota
+	actPlayed
+	actFailed
+)
 
-func (q *Queue) finish(body json.RawMessage, ok bool) Response {
+// Started — аддон подтверждает, что трек начал играть. Награда пока не выполняется. Повтор безопасен.
+func (q *Queue) Started(body json.RawMessage) Response { return q.finish(body, actStarted) }
+
+// Played — трек отыгран до конца (с перемотками, но не пропущен): награда выполняется.
+func (q *Queue) Played(body json.RawMessage) Response { return q.finish(body, actPlayed) }
+
+// Failed — запустить не удалось или трек пропущен: награда отменяется.
+func (q *Queue) Failed(body json.RawMessage) Response { return q.finish(body, actFailed) }
+
+func (q *Queue) finish(body json.RawMessage, act action) Response {
 	var b finishBody
 	if err := json.Unmarshal(body, &b); err != nil || b.ID < 1 {
 		return errResp(http.StatusBadRequest, `body must be {"id": N}`)
@@ -230,15 +260,28 @@ func (q *Queue) finish(body json.RawMessage, ok bool) Response {
 		if it.ID != b.ID {
 			continue
 		}
-		if ok && it.Status != statusSent {
-			return errResp(http.StatusConflict, "request was not sent to the player") // подтверждать можно только отданную
-		}
-		if it.Status != statusSent && it.Status != statusQueued {
-			return errResp(http.StatusConflict, "request is already "+it.Status)
-		}
-		if ok {
+		switch act {
+		case actStarted:
+			if it.Status == statusPlaying {
+				return Response{http.StatusOK, map[string]any{"ok": true}} // повтор подтверждения
+			}
+			if it.Status != statusSent {
+				return errResp(http.StatusConflict, "request was not sent to the player") // подтверждать можно только отданную
+			}
+			it.Status = statusPlaying
+			if err := q.save(s); err != nil {
+				return errResp(http.StatusInternalServerError, storeError)
+			}
+			return Response{http.StatusOK, map[string]any{"ok": true}}
+		case actPlayed:
+			if it.Status != statusPlaying && it.Status != statusSent {
+				return errResp(http.StatusConflict, "request is "+it.Status+", not playing")
+			}
 			it.Status = statusPlayed
-		} else {
+		default:
+			if it.Status != statusQueued && it.Status != statusSent && it.Status != statusPlaying {
+				return errResp(http.StatusConflict, "request is already "+it.Status)
+			}
 			reason := []rune(b.Reason)
 			if len(reason) > maxReason {
 				reason = reason[:maxReason]
@@ -249,10 +292,98 @@ func (q *Queue) finish(body json.RawMessage, ok bool) Response {
 		if err := q.save(s); err != nil {
 			return errResp(http.StatusInternalServerError, storeError)
 		}
-		q.complete(done, ok) // после сохранения: если запись не удалась, награду не трогаем и аддон повторит подтверждение
+		q.complete(done, act == actPlayed) // после сохранения: если запись не удалась, награду не трогаем и аддон повторит подтверждение
 		return Response{http.StatusOK, map[string]any{"ok": true}}
 	}
 	return errResp(http.StatusNotFound, "unknown request")
+}
+
+// Playing — заявки, которые аддон начал играть, но не довёл до конца. Аддон спрашивает их после перезапуска,
+// чтобы продолжить следить за треком или вернуть баллы, если трек уже не играет.
+func (q *Queue) Playing() Response {
+	s, err := q.Env.Load()
+	if err != nil {
+		return errResp(http.StatusInternalServerError, storeError)
+	}
+	items := []Item{}
+	for _, it := range s.Items {
+		if it.Status == statusPlaying {
+			items = append(items, it)
+		}
+	}
+	return Response{http.StatusOK, map[string]any{"items": items}}
+}
+
+// --- бан-лист ---
+
+func (q *Queue) isBanned(trackID string) bool {
+	bans, err := q.Env.LoadBans()
+	if err != nil {
+		q.Env.Log("warn", "бан-лист недоступен, проверка пропущена", "err", err.Error())
+		return false
+	}
+	for _, b := range bans {
+		if b.TrackID == trackID {
+			return true
+		}
+	}
+	return false
+}
+
+// Ban добавляет трек в бан-лист (повтор не дублирует). Самые старые записи вытесняются при переполнении.
+func (q *Queue) Ban(trackID, title string) error {
+	bans, err := q.Env.LoadBans()
+	if err != nil {
+		return err
+	}
+	for _, b := range bans {
+		if b.TrackID == trackID {
+			return nil
+		}
+	}
+	if rs := []rune(title); len(rs) > maxBanName {
+		title = string(rs[:maxBanName])
+	}
+	bans = append(bans, Ban{TrackID: trackID, Title: title, At: q.Now().Unix()})
+	if len(bans) > maxBans {
+		bans = bans[len(bans)-maxBans:]
+	}
+	return q.Env.SaveBans(bans)
+}
+
+// Unban убирает трек из бан-листа.
+func (q *Queue) Unban(body json.RawMessage) Response {
+	var b struct {
+		TrackID string `json:"trackId"`
+	}
+	if err := json.Unmarshal(body, &b); err != nil || !trackIDRe.MatchString(b.TrackID) {
+		return errResp(http.StatusBadRequest, `body must be {"trackId": "digits"}`)
+	}
+	bans, err := q.Env.LoadBans()
+	if err != nil {
+		return errResp(http.StatusInternalServerError, storeError)
+	}
+	for i, x := range bans {
+		if x.TrackID == b.TrackID {
+			if err := q.Env.SaveBans(append(bans[:i:i], bans[i+1:]...)); err != nil {
+				return errResp(http.StatusInternalServerError, storeError)
+			}
+			return Response{http.StatusOK, map[string]any{"ok": true}}
+		}
+	}
+	return errResp(http.StatusNotFound, "track is not banned")
+}
+
+// Bans — бан-лист.
+func (q *Queue) Bans() Response {
+	bans, err := q.Env.LoadBans()
+	if err != nil {
+		return errResp(http.StatusInternalServerError, storeError)
+	}
+	if bans == nil {
+		bans = []Ban{}
+	}
+	return Response{http.StatusOK, map[string]any{"items": bans}}
 }
 
 // List — вся очередь с историей (для интерфейса).
