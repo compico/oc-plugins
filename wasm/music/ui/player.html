@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Плеер с заявками</title>
+<style>
+  :root { --accent: #8b5cf6; --accent2: #22d3ee; --ink: #fff; --muted: #ffffffa6; --card: #0b0b12d9; --line: #ffffff1f; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; font: 16px/1.3 system-ui, "Segoe UI", Roboto, sans-serif; color: var(--ink); }
+  #root { padding: 10px; display: grid; gap: 8px; }
+
+  .player { display: grid; grid-template-columns: 96px 1fr; gap: 14px; padding: 12px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 8px 28px #0008; }
+  .cover { width: 96px; height: 96px; border-radius: 12px; background: linear-gradient(135deg, #312e81, #0e7490); overflow: hidden; position: relative; }
+  .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cover.idle::after { content: "♪"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 40px; color: #ffffff80; }
+  .meta { min-width: 0; display: grid; align-content: center; gap: 2px; }
+  .title { font-size: 21px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .artist { font-size: 15px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar { margin-top: 10px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .time { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .paused .bar > i { filter: grayscale(1) brightness(.8); }
+  .fresh .title, .fresh .artist { animation: in .35s ease-out; }
+  @keyframes in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .fresh .title, .fresh .artist { animation: none; } }
+
+  .orders { display: grid; gap: 5px; padding: 10px 12px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); }
+  h1 { margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .row { display: grid; grid-template-columns: 1.6em 1fr auto; gap: 8px; align-items: baseline; padding: 5px 8px; border-radius: 8px; }
+  .row.live { background: #8b5cf633; }
+  .n { color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+  .who { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .what { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11em; }
+  .note { color: var(--muted); font-size: 14px; padding: 2px 8px; }
+  .err { color: #fca5a5; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="/plugin-sdk/oc.js"></script>
+<script>
+// Всё, что пришло от плагина и зрителей, — недоверенный текст: в DOM оно попадает только через textContent,
+// а адрес обложки собирается из пути, который плагин уже проверил (avatars.yandex.net), и проверяется здесь ещё раз.
+const root = document.getElementById("root");
+const SHOW = 4; // сколько ожидающих заявок показывать
+
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+const coverUrl = (c) => (typeof c === "string" && /^avatars\.yandex\.net\/[A-Za-z0-9._\/%-]+$/.test(c)) ? "https://" + c.replace("%%", "400x400") : "";
+
+// Скелет строится один раз: дальше обновляется только текст и ширина полосы, поэтому обложка не мигает.
+const ui = {
+  player: el("div", "player"), cover: el("div", "cover idle"), title: el("div", "title"), artist: el("div", "artist"),
+  fill: el("i"), cur: el("span"), dur: el("span"), orders: el("div", "orders"),
+};
+const bar = el("div", "bar"); bar.append(ui.fill);
+const time = el("div", "time"); time.append(ui.cur, ui.dur);
+const meta = el("div", "meta"); meta.append(ui.title, ui.artist, bar, time);
+ui.player.append(ui.cover, meta);
+root.append(ui.player, ui.orders);
+
+let now = null, fetchedAt = 0, shownTrack = null, shownCover = "";
+
+function paintNow() {
+  if (!now) { ui.fill.style.width = "0%"; return; }
+  const pos = Math.min(now.durationMs || Infinity, now.positionMs + (now.playing ? performance.now() - fetchedAt : 0));
+  ui.fill.style.width = now.durationMs ? Math.min(100, (pos / now.durationMs) * 100).toFixed(2) + "%" : "0%";
+  ui.cur.textContent = mmss(pos);
+}
+
+function renderNow(n) {
+  now = n; fetchedAt = performance.now();
+  ui.player.classList.toggle("paused", !!n && !n.playing);
+  if (!n) {
+    ui.title.textContent = "Ничего не играет"; ui.artist.textContent = "Запустите PulseSync с аддоном PulseRedeem";
+    ui.dur.textContent = ""; ui.cur.textContent = "";
+    ui.cover.replaceChildren(); ui.cover.className = "cover idle"; shownCover = ""; shownTrack = null; paintNow();
+    return;
+  }
+  ui.title.textContent = n.title || "Без названия";
+  ui.artist.textContent = (n.artists || []).join(", ");
+  ui.dur.textContent = n.durationMs ? mmss(n.durationMs) : "";
+  const url = coverUrl(n.cover);
+  if (url !== shownCover) {
+    shownCover = url;
+    if (url) {
+      const img = new Image(); img.alt = ""; img.referrerPolicy = "no-referrer";
+      img.onerror = () => { ui.cover.replaceChildren(); ui.cover.className = "cover idle"; };
+      img.src = url; ui.cover.replaceChildren(img); ui.cover.className = "cover";
+    } else { ui.cover.replaceChildren(); ui.cover.className = "cover idle"; }
+  }
+  if (n.trackId !== shownTrack) {
+    shownTrack = n.trackId;
+    ui.player.classList.remove("fresh"); void ui.player.offsetWidth; ui.player.classList.add("fresh");
+  }
+  paintNow();
+}
+
+function row(label, it, live) {
+  const e = el("div", "row" + (live ? " live" : ""));
+  const what = live && now && now.trackId === it.trackId ? "играет" : live ? "запускается" : (it.trackId ? "трек " + it.trackId : "");
+  e.append(el("span", "n", label), el("span", "who", it.user || "—"), el("span", "what", what));
+  return e;
+}
+
+function renderOrders(items) {
+  const live = items.filter((i) => i.status === "sent");
+  const queued = items.filter((i) => i.status === "queued");
+  const kids = [el("h1", "", "Заявки")];
+  if (!live.length && !queued.length) kids.push(el("div", "note", "Заказов пока нет"));
+  live.forEach((it) => kids.push(row("▶", it, true)));
+  queued.slice(0, SHOW).forEach((it, i) => kids.push(row(String(i + 1), it, false)));
+  if (queued.length > SHOW) kids.push(el("div", "note", "…и ещё " + (queued.length - SHOW)));
+  ui.orders.replaceChildren(...kids);
+}
+
+async function tick() {
+  try {
+    const r = await oc.plugin.get("/queue");
+    if (r.status !== 200 || !r.body || !Array.isArray(r.body.items)) throw new Error("status " + r.status);
+    renderNow(r.body.now && typeof r.body.now === "object" ? r.body.now : null);
+    renderOrders(r.body.items);
+  } catch (e) {
+    ui.orders.replaceChildren(el("div", "note err", "Плагин не отвечает"));
+  }
+}
+
+oc.ready.then(
+  () => { tick(); setInterval(tick, 2000); setInterval(paintNow, 250); },
+  () => root.replaceChildren(el("div", "orders note err", "Откройте виджет через Overlay Composer")),
+);
+</script>
+</body>
+</html>

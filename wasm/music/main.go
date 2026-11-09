@@ -15,7 +15,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 // sdkEnv подключает очередь к хосту через SDK.
 type sdkEnv struct{}
@@ -67,7 +67,10 @@ func init() {
 		Description: "Заявки на треки Яндекс Музыки за баллы канала: очередь и выдача плееру. Награда выполняется или отменяется сама.",
 		Permissions: []string{ocplugin.PermStorage, ocplugin.PermRedeem},
 		// Интерфейс лежит в ui/ и упаковывается в .wasm при сборке (ocpack).
-		Widgets: []ocplugin.Widget{{ID: "queue", Name: "Очередь треков", Entry: "index.html", Width: 420, Height: 360}},
+		Widgets: []ocplugin.Widget{
+			{ID: "queue", Name: "Очередь треков", Entry: "index.html", Width: 420, Height: 360},
+			{ID: "player", Name: "Плеер с заявками", Entry: "player.html", Width: 460, Height: 400},
+		},
 		ConfigSchema: map[string]any{
 			"rewardId": map[string]any{
 				"type": "string", "format": "twitch.reward", "title": "Награда для заявок",
@@ -76,6 +79,7 @@ func init() {
 		},
 	})
 	q := &Queue{Env: sdkEnv{}, Now: time.Now}
+	pl := &Player{Now: time.Now}
 	p.OnInit(func() error {
 		var cfg Config
 		if err := p.Config(&cfg); err != nil {
@@ -92,7 +96,8 @@ func init() {
 		q.OnRedemption(Redemption{ID: r.ID, RewardID: r.RewardID, User: user, Input: r.Input})
 	})
 	p.GET("/next", func(c *ocplugin.Ctx) error { return reply(c, q.Next()) })
-	p.GET("/queue", func(c *ocplugin.Ctx) error { return reply(c, q.List()) })
+	p.GET("/queue", func(c *ocplugin.Ctx) error { return reply(c, withNow(q.List(), pl.Get())) })
+	p.POST("/nowplaying", func(c *ocplugin.Ctx) error { return reply(c, pl.Set(rawBody(c))) })
 	p.POST("/started", func(c *ocplugin.Ctx) error { return reply(c, q.Started(rawBody(c))) })
 	p.POST("/failed", func(c *ocplugin.Ctx) error { return reply(c, q.Failed(rawBody(c))) })
 }
