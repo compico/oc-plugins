@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Пульт плеера</title>
+<style>
+  :root { --accent: #8b5cf6; --danger: #ef4444; --ink: #fff; --muted: #ffffffa6; --card: #14141c; --line: #ffffff1f; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--card); font: 15px/1.3 system-ui, "Segoe UI", Roboto, sans-serif; color: var(--ink); }
+  #root { padding: 12px; display: grid; gap: 10px; }
+  .now { display: grid; gap: 2px; min-width: 0; }
+  .title { font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .artist { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  button { font: inherit; color: var(--ink); background: #ffffff14; border: 1px solid var(--line); border-radius: 10px; padding: 12px 6px; cursor: pointer; display: grid; gap: 2px; justify-items: center; }
+  button b { font-size: 20px; font-weight: 400; line-height: 1; }
+  button span { font-size: 12px; color: var(--muted); }
+  button:hover:not(:disabled) { background: #ffffff26; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.ban { border-color: #ef444466; }
+  button.ban.armed { background: var(--danger); border-color: var(--danger); }
+  button.ban.armed span { color: #fff; }
+  .msg { min-height: 1.3em; font-size: 13px; color: var(--muted); }
+  .msg.ok { color: #86efac; } .msg.err { color: #fca5a5; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="/plugin-sdk/oc.js"></script>
+<script>
+// Пульт плеера: ставит команды в плагин, аддон PulseRedeem забирает их и исполняет в PulseSync.
+// Ставьте его в редакторе OC (док/превью), а не на сцену стрима: зрители не должны видеть кнопки.
+const root = document.getElementById("root");
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+const btn = (cls, icon, label, onclick) => { const b = el("button", cls); b.type = "button"; b.append(el("b", "", icon), el("span", "", label)); b.onclick = onclick; return b; };
+
+const title = el("div", "title", "—"), artist = el("div", "artist", "");
+const now = el("div", "now"); now.append(title, artist);
+const msg = el("div", "msg");
+const toggle = btn("", "⏯", "Пауза / играть", () => send("toggle"));
+const skip = btn("", "⏭", "Пропустить", () => send("skip"));
+const ban = btn("ban", "⏭", "Пропустить и забанить", onBan);
+const btns = el("div", "btns"); btns.append(toggle, skip, ban);
+root.append(now, btns, msg);
+
+let busy = false, armTimer = 0, canAct = false;
+const say = (text, cls) => { msg.textContent = text; msg.className = "msg" + (cls ? " " + cls : ""); };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function sync() { for (const b of [toggle, skip, ban]) b.disabled = busy || !canAct; }
+
+function disarm() { clearTimeout(armTimer); ban.classList.remove("armed"); ban.lastChild.textContent = "Пропустить и забанить"; }
+function onBan() {
+  if (!ban.classList.contains("armed")) { // бан необратим из виджета: нужно второе нажатие
+    ban.classList.add("armed"); ban.lastChild.textContent = "Точно? Нажмите ещё раз";
+    armTimer = setTimeout(disarm, 3000); return;
+  }
+  disarm(); send("skip_ban");
+}
+
+// Команда считается выполненной, когда аддон забрал её из очереди плагина.
+async function send(action) {
+  if (busy) return;
+  busy = true; sync(); say("Отправляю…");
+  try {
+    const r = await oc.plugin.post("/control", { action });
+    if (r.status === 409) return say("Сейчас ничего не играет", "err");
+    if (r.status === 429) return say("Слишком много команд подряд", "err");
+    if (r.status !== 200 || !r.body || typeof r.body.id !== "number") return say("Не удалось отправить команду", "err");
+    const id = r.body.id;
+    for (let i = 0; i < 10; i++) {
+      await sleep(500);
+      const p = await oc.plugin.get("/commands");
+      if (p.status === 200 && p.body && Array.isArray(p.body.commands) && !p.body.commands.some((c) => c.id === id)) {
+        return say(action === "skip_ban" ? "Пропущено, трек в бане" : "Готово", "ok");
+      }
+    }
+    say("Аддон не отвечает: PulseSync запущен?", "err");
+  } catch (e) {
+    say("Плагин не отвечает", "err");
+  } finally { busy = false; sync(); }
+}
+
+async function tick() {
+  try {
+    const r = await oc.plugin.get("/queue");
+    const n = r.status === 200 && r.body && typeof r.body.now === "object" ? r.body.now : null;
+    canAct = !!n || canAct;
+    if (r.status === 200) canAct = true;
+    title.textContent = n ? (n.title || "Без названия") : "Ничего не играет";
+    artist.textContent = n ? ((n.artists || []).join(", ") + (n.playing ? "" : " · пауза")) : "";
+  } catch (e) { canAct = false; title.textContent = "Плагин не отвечает"; artist.textContent = ""; }
+  sync();
+}
+
+oc.ready.then(() => { tick(); setInterval(tick, 2000); }, () => { title.textContent = "Откройте виджет через Overlay Composer"; });
+sync();
+</script>
+</body>
+</html>

@@ -38,7 +38,7 @@ function row(n, it, now) {
 }
 
 function render(items) {
-  const live = items.filter((i) => i.status === "sent");
+  const live = items.filter((i) => i.status === "sent" || i.status === "playing");
   const queued = items.filter((i) => i.status === "queued");
   const kids = [node("h1", "", "Очередь треков")];
   if (!live.length && !queued.length) kids.push(node("div", "empty", "Очередь пуста"));
