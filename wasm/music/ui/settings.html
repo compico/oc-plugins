@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Заявки на треки: управление</title>
+<style>
+  :root { --accent: #8b5cf6; --danger: #ef4444; --ink: #e8e8f0; --muted: #9aa0b4; --card: #14141c; --line: #ffffff1f; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--card); font: 14px/1.35 system-ui, "Segoe UI", Roboto, sans-serif; color: var(--ink); }
+  #root { padding: 4px 2px 12px; display: grid; gap: 18px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1; min-width: 0; }
+  button, input { font: inherit; color: var(--ink); background: #ffffff14; border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; }
+  input { background: #0000004d; min-width: 0; }
+  button { cursor: pointer; }
+  button:hover:not(:disabled) { background: #ffffff26; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.danger { border-color: #ef444466; }
+  button.danger.armed { background: var(--danger); border-color: var(--danger); }
+  button.small { padding: 3px 9px; font-size: 12px; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 240px; overflow: auto; }
+  li { display: flex; gap: 8px; align-items: center; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; }
+  li .txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #ffffff1f; color: var(--muted); white-space: nowrap; }
+  .tag.queued { color: #93c5fd; } .tag.sent, .tag.playing { color: #86efac; } .tag.failed { color: #fca5a5; }
+  .empty, .msg { color: var(--muted); font-size: 13px; }
+  .msg.ok { color: #86efac; } .msg.err { color: #fca5a5; }
+</style>
+</head>
+<body>
+<div id="root">
+  <section><h2>Плеер</h2>
+    <div class="row"><div class="grow" id="now">—</div></div>
+    <div class="row" style="margin-top:6px">
+      <button id="toggle" type="button">⏯ Пауза / играть</button>
+      <button id="skip" type="button">⏭ Пропустить</button>
+      <button id="skipban" type="button" class="danger">⏭ Пропустить и забанить</button>
+    </div>
+  </section>
+  <section><h2>Очередь заявок</h2>
+    <ul id="queue"></ul>
+    <div class="row" style="margin-top:6px"><button id="clear" type="button" class="danger">Очистить очередь</button><span class="msg">Отменяет ожидающие заявки и возвращает баллы.</span></div>
+  </section>
+  <section><h2>Бан-лист</h2>
+    <div class="row"><input id="banInput" class="grow" placeholder="Ссылка на трек Яндекс Музыки или его номер"><button id="banAdd" type="button">Забанить</button></div>
+    <ul id="bans" style="margin-top:6px"></ul>
+  </section>
+  <div class="msg" id="msg"></div>
+</div>
+<script src="/plugin-sdk/oc.js"></script>
+<script>
+// Редкая страница для ручных действий. Все данные плагина попадают в DOM только через textContent.
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+const STATUS = { queued: "ждёт", sent: "отдана плееру", playing: "играет", played: "отыграна", failed: "отменена" };
+let busy = false;
+
+function say(text, cls) { $("msg").textContent = text; $("msg").className = "msg" + (cls ? " " + cls : ""); }
+
+async function call(method, path, body) {
+  const r = method === "GET" ? await oc.plugin.get(path) : await oc.plugin.post(path, body);
+  if (r.status !== 200) throw new Error((r.body && r.body.error) || "ошибка " + r.status);
+  return r.body;
+}
+
+// Опасное действие подтверждается вторым нажатием в течение 3 секунд.
+function armed(btn, label, run) {
+  let timer = 0;
+  btn.addEventListener("click", () => {
+    if (!btn.classList.contains("armed")) {
+      btn.classList.add("armed"); btn.textContent = "Точно? Нажмите ещё раз";
+      timer = setTimeout(() => { btn.classList.remove("armed"); btn.textContent = label; }, 3000); return;
+    }
+    clearTimeout(timer); btn.classList.remove("armed"); btn.textContent = label; run();
+  });
+}
+
+async function act(fn, okText) {
+  if (busy) return;
+  busy = true;
+  try { await fn(); say(okText, "ok"); } catch (e) { say(e.message || "Плагин не отвечает", "err"); }
+  busy = false;
+  refresh();
+}
+
+function renderQueue(items) {
+  const list = $("queue"); list.replaceChildren();
+  const open = items.filter((i) => i.status === "queued" || i.status === "sent" || i.status === "playing");
+  if (!open.length) { list.append(el("li", "empty", "Очередь пуста")); return; }
+  for (const it of open) {
+    const li = el("li");
+    li.append(el("span", "tag " + it.status, STATUS[it.status] || it.status), el("span", "txt", (it.user || "зритель") + ": " + (it.url || it.input || "")));
+    if (it.status === "queued" || it.status === "sent") {
+      const b = el("button", "small", "Отменить"); b.type = "button";
+      b.title = "Отменить заявку и вернуть баллы";
+      b.onclick = () => act(() => call("POST", "/failed", { id: it.id, reason: "отменена стримером" }), "Заявка отменена, баллы возвращены");
+      li.append(b);
+    }
+    list.append(li);
+  }
+}
+
+function renderBans(items) {
+  const list = $("bans"); list.replaceChildren();
+  if (!items.length) { list.append(el("li", "empty", "Бан-лист пуст")); return; }
+  for (const b of items.slice().reverse()) {
+    const li = el("li");
+    li.append(el("span", "txt", (b.title || "трек") + " · " + b.trackId));
+    const u = el("button", "small", "Разбанить"); u.type = "button";
+    u.onclick = () => act(() => call("POST", "/unban", { trackId: b.trackId }), "Трек снова разрешён");
+    li.append(u);
+    list.append(li);
+  }
+}
+
+async function refresh() {
+  try {
+    const [q, b] = await Promise.all([call("GET", "/queue"), call("GET", "/bans")]);
+    const n = q.now;
+    $("now").textContent = n ? (n.title || "Без названия") + (n.artists && n.artists.length ? " — " + n.artists.join(", ") : "") + (n.playing ? "" : " · пауза") : "Ничего не играет";
+    for (const id of ["toggle", "skip", "skipban"]) $(id).disabled = !n;
+    renderQueue(q.items || []); renderBans(b.items || []);
+  } catch (e) { $("now").textContent = "Плагин не отвечает"; }
+}
+
+const send = (action, okText) => act(() => call("POST", "/control", { action }), okText);
+$("toggle").onclick = () => send("toggle", "Команда отправлена");
+$("skip").onclick = () => send("skip", "Команда отправлена");
+armed($("skipban"), "⏭ Пропустить и забанить", () => send("skip_ban", "Пропущено, трек в бане"));
+armed($("clear"), "Очистить очередь", () => act(async () => { const r = await call("POST", "/clear", {}); say("Отменено заявок: " + (r.cleared || 0), "ok"); }, "Готово"));
+$("banAdd").onclick = () => {
+  const v = $("banInput").value.trim();
+  if (!v) return;
+  const body = /^\d{1,20}$/.test(v) ? { trackId: v } : { link: v };
+  act(async () => { await call("POST", "/ban", body); $("banInput").value = ""; }, "Трек в бане");
+};
+$("banInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("banAdd").click(); });
+
+oc.ready.then(() => { refresh(); setInterval(refresh, 3000); }, () => { $("now").textContent = "Откройте страницу через Overlay Composer"; });
+</script>
+</body>
+</html>

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -396,4 +397,71 @@ func (q *Queue) List() Response {
 		s.Items = []Item{}
 	}
 	return Response{http.StatusOK, map[string]any{"items": s.Items}}
+}
+
+// ClearQueued отменяет все заявки, которые ещё не отданы плееру (queued): баллы возвращаются. Играющие и отданные не трогаем:
+// ими занят аддон, их можно отменить по одной или пропустить.
+func (q *Queue) ClearQueued(body json.RawMessage) Response {
+	var b struct {
+		Reason string `json:"reason"`
+	}
+	_ = json.Unmarshal(body, &b) // тело необязательно
+	reason := []rune(b.Reason)
+	if len(reason) == 0 {
+		reason = []rune("очередь очищена стримером")
+	}
+	if len(reason) > maxReason {
+		reason = reason[:maxReason]
+	}
+	s, err := q.Env.Load()
+	if err != nil {
+		return errResp(http.StatusInternalServerError, storeError)
+	}
+	var done []Item
+	for i := range s.Items {
+		if it := &s.Items[i]; it.Status == statusQueued {
+			it.Status, it.Error = statusFailed, string(reason)
+			done = append(done, *it)
+		}
+	}
+	if len(done) == 0 {
+		return Response{http.StatusOK, map[string]any{"ok": true, "cleared": 0}}
+	}
+	if err := q.save(s); err != nil {
+		return errResp(http.StatusInternalServerError, storeError)
+	}
+	for _, it := range done {
+		q.complete(it, false) // после сохранения, как в finish
+	}
+	return Response{http.StatusOK, map[string]any{"ok": true, "cleared": len(done)}}
+}
+
+// BanTrack — ручной бан по номеру трека или ссылке Яндекс Музыки (со страницы настроек).
+func (q *Queue) BanTrack(body json.RawMessage) Response {
+	var b struct {
+		TrackID string `json:"trackId"`
+		Link    string `json:"link"`
+		Title   string `json:"title"`
+	}
+	if err := json.Unmarshal(body, &b); err != nil {
+		return errResp(http.StatusBadRequest, `body must be {"trackId": "digits"} or {"link": "https://music.yandex.ru/album/N/track/N"}`)
+	}
+	id, title := b.TrackID, b.Title
+	if id == "" && b.Link != "" {
+		t, ok := parseYandexTrack(b.Link)
+		if !ok {
+			return errResp(http.StatusBadRequest, "not a Yandex Music track link")
+		}
+		id = t.TrackID
+	}
+	if !trackIDRe.MatchString(id) {
+		return errResp(http.StatusBadRequest, "trackId must be digits")
+	}
+	if strings.TrimSpace(title) == "" {
+		title = "трек " + id
+	}
+	if err := q.Ban(id, title); err != nil {
+		return errResp(http.StatusInternalServerError, storeError)
+	}
+	return Response{http.StatusOK, map[string]any{"ok": true}}
 }
