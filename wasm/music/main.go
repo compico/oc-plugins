@@ -15,7 +15,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.4.0"
+const version = "0.5.0"
 
 // sdkEnv подключает очередь к хосту через SDK.
 type sdkEnv struct{}
@@ -74,6 +74,8 @@ func init() {
 		Description: "Заявки на треки Яндекс Музыки за баллы канала: очередь и выдача плееру. Награда выполняется или отменяется сама.",
 		Permissions: []string{ocplugin.PermStorage, ocplugin.PermRedeem},
 		// Интерфейс лежит в ui/ и упаковывается в .wasm при сборке (ocpack).
+		// Страница настроек (окно Plugins → Settings): очередь, пульт и бан-лист для ручного управления в редких случаях.
+		Settings: "settings.html",
 		Widgets: []ocplugin.Widget{
 			{ID: "queue", Name: "Очередь треков", Entry: "index.html", Width: 420, Height: 360},
 			{ID: "player", Name: "Плеер с заявками", Entry: "player.html", Width: 460, Height: 400},
@@ -116,6 +118,8 @@ func init() {
 	p.GET("/commands", func(c *ocplugin.Ctx) error { return reply(c, ctl.Pending()) })
 	p.POST("/commands/done", func(c *ocplugin.Ctx) error { return reply(c, ctl.Done(rawBody(c))) })
 	p.GET("/bans", func(c *ocplugin.Ctx) error { return reply(c, q.Bans()) })
+	p.POST("/ban", func(c *ocplugin.Ctx) error { return reply(c, q.BanTrack(rawBody(c))) })
+	p.POST("/clear", func(c *ocplugin.Ctx) error { return reply(c, q.ClearQueued(rawBody(c))) })
 	p.POST("/unban", func(c *ocplugin.Ctx) error { return reply(c, q.Unban(rawBody(c))) })
 }
 

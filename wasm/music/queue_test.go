@@ -342,3 +342,58 @@ func TestTwitchErrorDoesNotBreakQueue(t *testing.T) {
 		t.Fatalf("ошибка Twitch должна попасть в лог: %v", e.logs)
 	}
 }
+
+func TestClearQueuedCancelsOnlyQueuedAndRefunds(t *testing.T) {
+	q, e := newQ()
+	for i := 1; i <= 3; i++ {
+		q.OnRedemption(red(fmt.Sprintf("r%d", i), link(i)))
+	}
+	q.Next() // первая заявка отдана плееру (sent): её не трогаем
+	r := q.ClearQueued(nil)
+	if r.Status != 200 || r.Body.(map[string]any)["cleared"] != 2 {
+		t.Fatalf("clear: %+v", r)
+	}
+	got := map[string]int{}
+	for _, it := range e.st.Items {
+		got[it.Status]++
+	}
+	if got[statusSent] != 1 || got[statusFailed] != 2 {
+		t.Fatalf("statuses: %v", got)
+	}
+	if strings.Join(e.updates, ",") != "r2:CANCELED,r3:CANCELED" {
+		t.Fatalf("refunds: %v", e.updates)
+	}
+	if r := q.ClearQueued(nil); r.Body.(map[string]any)["cleared"] != 0 || len(e.updates) != 2 {
+		t.Fatalf("повторная очистка ничего не отменяет: %+v %v", r, e.updates)
+	}
+}
+
+func TestClearQueuedStoreErrorTouchesNothing(t *testing.T) {
+	q, e := newQ()
+	q.OnRedemption(red("r1", link(1)))
+	e.saveErr = errors.New("disk")
+	if r := q.ClearQueued(nil); r.Status != 500 || len(e.updates) != 0 {
+		t.Fatalf("при ошибке записи награды не трогаем: %+v %v", r, e.updates)
+	}
+}
+
+func TestBanTrackByIDAndLink(t *testing.T) {
+	q, e := newQ()
+	for _, b := range []string{`{"trackId":"123","title":"Song"}`, `{"link":"https://music.yandex.ru/album/5/track/456"}`, `{"trackId":"123"}`} {
+		if r := q.BanTrack(json.RawMessage(b)); r.Status != 200 {
+			t.Fatalf("%s: %+v", b, r)
+		}
+	}
+	if len(e.bans) != 2 || e.bans[0].Title != "Song" || e.bans[1].TrackID != "456" || e.bans[1].Title != "трек 456" {
+		t.Fatalf("bans: %+v", e.bans)
+	}
+	for _, bad := range []string{`{}`, `{"trackId":"12a"}`, `{"link":"https://evil.example/album/1/track/2"}`, `{"link":"http://music.yandex.ru/album/1/track/2"}`, `nope`} {
+		if r := q.BanTrack(json.RawMessage(bad)); r.Status != 400 {
+			t.Errorf("%s должен давать 400: %+v", bad, r)
+		}
+	}
+	e.bansErr = errors.New("x")
+	if r := q.BanTrack(json.RawMessage(`{"trackId":"9"}`)); r.Status != 500 {
+		t.Fatalf("ошибка хранилища: %+v", r)
+	}
+}
