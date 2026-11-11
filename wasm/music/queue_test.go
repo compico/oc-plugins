@@ -18,6 +18,7 @@ type fakeEnv struct {
 	updateErr error
 	updates   []string
 	logs      []string
+	said      []string
 }
 
 func (f *fakeEnv) Load() (state, error) {
@@ -61,6 +62,7 @@ func (f *fakeEnv) Complete(_, id string, ok bool) error {
 	f.updates = append(f.updates, id+":"+st)
 	return f.updateErr
 }
+func (f *fakeEnv) Say(text string)                 { f.said = append(f.said, text) }
 func (f *fakeEnv) Log(level, msg string, _ ...any) { f.logs = append(f.logs, level+": "+msg) }
 
 func newQ() (*Queue, *fakeEnv) {
