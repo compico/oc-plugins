@@ -15,7 +15,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.5.0"
+const version = "0.6.0"
 
 // sdkEnv подключает очередь к хосту через SDK.
 type sdkEnv struct{}
@@ -72,7 +72,8 @@ func init() {
 	p := ocplugin.New(ocplugin.Meta{
 		ID: "music", Name: "Заявки на треки", Version: version, Author: "compico",
 		Description: "Заявки на треки Яндекс Музыки за баллы канала: очередь и выдача плееру. Награда выполняется или отменяется сама.",
-		Permissions: []string{ocplugin.PermStorage, ocplugin.PermRedeem},
+		Permissions: []string{ocplugin.PermStorage, ocplugin.PermRedeem, ocplugin.PermPublish},
+		Events:      eventDecls(),
 		// Интерфейс лежит в ui/ и упаковывается в .wasm при сборке (ocpack).
 		// Страница настроек (окно Plugins → Settings): очередь, пульт и бан-лист для ручного управления в редких случаях.
 		Settings: "settings.html",
@@ -91,6 +92,14 @@ func init() {
 	q := &Queue{Env: sdkEnv{}, Now: time.Now}
 	pl := &Player{Now: time.Now}
 	ctl := &Control{Now: time.Now}
+	ev := &Events{Pub: sdkPublisher{}, Now: time.Now}
+	// После изменения очереди подписчики получают её целиком; ответ маршрута от этого не меняется.
+	changed := func(r Response) Response {
+		if r.Status == http.StatusOK {
+			ev.PublishQueue(q.List())
+		}
+		return r
+	}
 	p.OnInit(func() error {
 		var cfg Config
 		if err := p.Config(&cfg); err != nil {
@@ -105,21 +114,35 @@ func init() {
 			user = r.UserLogin
 		}
 		q.OnRedemption(Redemption{ID: r.ID, RewardID: r.RewardID, User: user, Input: r.Input})
+		ev.PublishQueue(q.List())
 	})
-	p.GET("/next", func(c *ocplugin.Ctx) error { return reply(c, q.Next()) })
+	p.GET("/next", func(c *ocplugin.Ctx) error { return reply(c, changed(q.Next())) })
 	p.GET("/queue", func(c *ocplugin.Ctx) error { return reply(c, withNow(q.List(), pl.Get())) })
-	p.POST("/nowplaying", func(c *ocplugin.Ctx) error { return reply(c, pl.Set(rawBody(c))) })
-	p.POST("/started", func(c *ocplugin.Ctx) error { return reply(c, q.Started(rawBody(c))) })
-	p.POST("/played", func(c *ocplugin.Ctx) error { return reply(c, q.Played(rawBody(c))) })
-	p.POST("/failed", func(c *ocplugin.Ctx) error { return reply(c, q.Failed(rawBody(c))) })
+	p.POST("/nowplaying", func(c *ocplugin.Ctx) error {
+		r := pl.Set(rawBody(c))
+		if r.Status == http.StatusOK {
+			ev.PublishNow(pl.Get())
+		}
+		return reply(c, r)
+	})
+	p.POST("/started", func(c *ocplugin.Ctx) error { return reply(c, changed(q.Started(rawBody(c)))) })
+	p.POST("/played", func(c *ocplugin.Ctx) error { return reply(c, changed(q.Played(rawBody(c)))) })
+	p.POST("/failed", func(c *ocplugin.Ctx) error { return reply(c, changed(q.Failed(rawBody(c)))) })
 	p.GET("/playing", func(c *ocplugin.Ctx) error { return reply(c, q.Playing()) })
 	// Управление плеером: пульт (виджет) ставит команду, аддон забирает.
-	p.POST("/control", func(c *ocplugin.Ctx) error { return reply(c, ctl.Request(rawBody(c), q, pl.Get())) })
+	p.POST("/control", func(c *ocplugin.Ctx) error {
+		raw := rawBody(c)
+		r := ctl.Request(raw, q, pl.Get())
+		if r.Status == http.StatusOK {
+			ev.PublishCommand(ctl)
+		}
+		return reply(c, r)
+	})
 	p.GET("/commands", func(c *ocplugin.Ctx) error { return reply(c, ctl.Pending()) })
 	p.POST("/commands/done", func(c *ocplugin.Ctx) error { return reply(c, ctl.Done(rawBody(c))) })
 	p.GET("/bans", func(c *ocplugin.Ctx) error { return reply(c, q.Bans()) })
 	p.POST("/ban", func(c *ocplugin.Ctx) error { return reply(c, q.BanTrack(rawBody(c))) })
-	p.POST("/clear", func(c *ocplugin.Ctx) error { return reply(c, q.ClearQueued(rawBody(c))) })
+	p.POST("/clear", func(c *ocplugin.Ctx) error { return reply(c, changed(q.ClearQueued(rawBody(c)))) })
 	p.POST("/unban", func(c *ocplugin.Ctx) error { return reply(c, q.Unban(rawBody(c))) })
 }
 
