@@ -15,7 +15,7 @@ import { WASI } from "node:wasi";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const WASM = join(ROOT, "wasm");
 const DIST = join(ROOT, "dist");
-const PERMS = new Set(["storage", "net.http", "twitch.redemption", "timer"]);
+const PERMS = new Set(["storage", "net.http", "twitch.redemption", "timer", "events.publish"]);
 const EVENTS = new Set(["twitch.redemption", "timer", "http.response"]);
 
 export function pluginIds() {
