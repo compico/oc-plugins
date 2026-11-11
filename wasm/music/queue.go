@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // Вся логика очереди здесь, без привязки к ABI и SDK: проверяется обычными тестами, а main.go только подключает её к хосту.
@@ -85,6 +86,8 @@ type Env interface {
 	// Complete меняет статус погашения на Twitch: ok — FULFILLED, иначе CANCELED (баллы возвращаются зрителю).
 	Complete(rewardID, redemptionID string, ok bool) error
 	Log(level, msg string, kv ...any)
+	// Say пишет в чат канала от бота. Не гарантирует доставку: заявка от этого не зависит.
+	Say(text string)
 }
 
 // Response — ответ маршрута: статус и JSON-тело.
@@ -140,6 +143,37 @@ func (q *Queue) complete(it Item, ok bool) {
 	}
 }
 
+// errDuplicate — причина отказа, когда этот трек уже ждёт очереди или играет по другой заявке.
+const errDuplicate = "the track is already in the queue"
+
+// activeWith: есть ли в очереди заявка на этот трек (ждёт, отдана аддону или играет). Отыгранные и отклонённые не считаются:
+// трек можно заказать снова, когда он уже сыграл.
+func activeWith(items []Item, trackID string) bool {
+	for _, x := range items {
+		if x.TrackID == trackID && (x.Status == statusQueued || x.Status == statusSent || x.Status == statusPlaying) {
+			return true
+		}
+	}
+	return false
+}
+
+// duplicateMessage — ответ в чат. Ник чистится: в сообщение попадает только безопасный текст без пробелов и управляющих символов.
+func duplicateMessage(user string) string {
+	name := strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+			return r
+		}
+		return -1
+	}, user)
+	if rs := []rune(name); len(rs) > 40 {
+		name = string(rs[:40])
+	}
+	if name == "" {
+		return "Этот трек уже есть в очереди заявок — баллы возвращены."
+	}
+	return "@" + name + " этот трек уже есть в очереди заявок — баллы возвращены."
+}
+
 // OnRedemption — событие twitch.redemption.
 func (q *Queue) OnRedemption(r Redemption) {
 	if q.Cfg.RewardID == "" {
@@ -177,6 +211,8 @@ func (q *Queue) OnRedemption(r Redemption) {
 		it.Status, it.Error = statusRejected, "the queue is full"
 	} else if q.isBanned(tr.TrackID) {
 		it.Status, it.Error = statusRejected, "the track is banned"
+	} else if dup := activeWith(s.Items, tr.TrackID); dup {
+		it.Status, it.Error = statusRejected, errDuplicate
 	} else {
 		it.AlbumID, it.TrackID, it.URL = tr.AlbumID, tr.TrackID, tr.URL
 	}
@@ -188,6 +224,9 @@ func (q *Queue) OnRedemption(r Redemption) {
 	if it.Status == statusRejected {
 		q.complete(it, false) // баллы возвращаются
 		q.Env.Log("info", "заявка отклонена", "user", it.User, "reason", it.Error)
+		if it.Error == errDuplicate {
+			q.Env.Say(duplicateMessage(it.User))
+		}
 		return
 	}
 	q.Env.Log("info", "заявка принята", "id", it.ID, "user", it.User, "track", it.TrackID)

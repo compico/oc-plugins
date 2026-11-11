@@ -15,7 +15,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.6.0"
+const version = "0.7.0"
 
 // sdkEnv подключает очередь к хосту через SDK.
 type sdkEnv struct{}
@@ -39,6 +39,12 @@ func (sdkEnv) Complete(rewardID, redemptionID string, ok bool) error {
 		return ocplugin.FulfillRedemption(rewardID, redemptionID)
 	}
 	return ocplugin.CancelRedemption(rewardID, redemptionID)
+}
+
+func (sdkEnv) Say(text string) {
+	if err := ocplugin.Say(text); err != nil {
+		ocplugin.Warn("не удалось написать в чат (нет разрешения chat.send или аккаунта бота?)", "err", err.Error())
+	}
 }
 
 func (sdkEnv) Log(level, msg string, kv ...any) {
@@ -72,7 +78,7 @@ func init() {
 	p := ocplugin.New(ocplugin.Meta{
 		ID: "music", Name: "Заявки на треки", Version: version, Author: "compico",
 		Description: "Заявки на треки Яндекс Музыки за баллы канала: очередь и выдача плееру. Награда выполняется или отменяется сама.",
-		Permissions: []string{ocplugin.PermStorage, ocplugin.PermRedeem, ocplugin.PermPublish},
+		Permissions: []string{ocplugin.PermStorage, ocplugin.PermRedeem, ocplugin.PermPublish, ocplugin.PermChat},
 		Events:      eventDecls(),
 		// Интерфейс лежит в ui/ и упаковывается в .wasm при сборке (ocpack).
 		// Страница настроек (окно Plugins → Settings): очередь, пульт и бан-лист для ручного управления в редких случаях.
@@ -134,6 +140,12 @@ func init() {
 		raw := rawBody(c)
 		r := ctl.Request(raw, q, pl.Get())
 		if r.Status == http.StatusOK {
+			// След для разбора «почему пропустился трек»: кто и когда поставил команду.
+			var b struct {
+				Action string `json:"action"`
+			}
+			_ = json.Unmarshal(raw, &b)
+			ocplugin.Info("команда пульта принята", "action", b.Action, "id", ctl.last)
 			ev.PublishCommand(ctl)
 		}
 		return reply(c, r)
