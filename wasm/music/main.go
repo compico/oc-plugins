@@ -15,7 +15,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.7.0"
+const version = "0.7.1"
 
 // sdkEnv подключает очередь к хосту через SDK.
 type sdkEnv struct{}
