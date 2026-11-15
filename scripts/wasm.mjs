@@ -79,7 +79,7 @@ function run(cmd, args, opts) {
 // ---- статика (виджеты): папка wasm/<id>/ui упаковывается в сам .wasm утилитой ocpack из Overlay Composer ----
 
 /** Ревизия overlaycomposer, из которой берётся ocpack. Менять осознанно: формат секции oc.assets версионируется ревизией. */
-export const OCPACK_REF = "4eb6541b0d2b7dcc2b464205f5870496ce37b853";
+export const OCPACK_REF = "506f335d09a449133f7e576671dbb9d421ff6972";
 const TOOLS = join(ROOT, ".tools", "bin");
 
 /** Файлы папки ui относительно неё (через «/»), без скрытых; null — папки нет. */
