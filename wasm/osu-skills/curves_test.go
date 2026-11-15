@@ -210,21 +210,3 @@ func TestValidTosu(t *testing.T) {
 		}
 	}
 }
-
-func TestSettingsFrom(t *testing.T) {
-	for name, c := range map[string]struct {
-		in   Config
-		want Settings
-	}{
-		"по умолчанию":      {Config{}, Settings{"ribbon", defaultWindow}},
-		"стиль и окно":      {Config{Style: " Silhouette ", Window: 10000}, Settings{"silhouette", 10000}},
-		"lines":             {Config{Style: "lines"}, Settings{"lines", defaultWindow}},
-		"неизвестный стиль": {Config{Style: "pie"}, Settings{"ribbon", defaultWindow}},
-		"окно мало":         {Config{Window: 10}, Settings{"ribbon", defaultWindow}},
-		"окно велико":       {Config{Window: maxWindow + 1}, Settings{"ribbon", defaultWindow}},
-	} {
-		if got := settingsFrom(c.in); got != c.want {
-			t.Errorf("%s: %+v, ждали %+v", name, got, c.want)
-		}
-	}
-}

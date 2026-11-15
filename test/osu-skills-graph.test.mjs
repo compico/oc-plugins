@@ -241,3 +241,33 @@ test('leaderAt: the leader of the window the time is in', () => {
   assert.equal(leaderAt(d, 999999), 'agility')
   assert.equal(leaderAt(d, -5), 'stamina')
 })
+
+// ── spectrum ─────────────────────────────────────────────────────────────
+
+const { stepBar } = createRequire(import.meta.url)('../wasm/osu-skills/ui/graph.js')
+
+test('stepBar: rises faster than it falls, settles exactly on the target', () => {
+  const up = { level: 0, peak: 0, hold: 0 }
+  stepBar(up, 1, 16)
+  const down = { level: 1, peak: 1, hold: 0 }
+  stepBar(down, 0, 16)
+  assert.ok(up.level > 1 - down.level, 'attack is faster than release')
+
+  const bar = { level: 0, peak: 0, hold: 0 }
+  let moved = true
+  for (let i = 0; i < 400 && moved; i++) moved = stepBar(bar, 0.6, 16)
+  assert.equal(bar.level, 0.6)
+  assert.equal(stepBar(bar, 0.6, 16), false, 'nothing moves: no need to redraw')
+})
+
+test('stepBar: the peak holds, then falls, and never drops below the level', () => {
+  const bar = { level: 0, peak: 0, hold: 0 }
+  for (let i = 0; i < 100; i++) stepBar(bar, 1, 16)
+  assert.equal(bar.peak, 1)
+  stepBar(bar, 0, 16) // the bar falls, the peak stays for a while
+  assert.equal(bar.peak, 1)
+  for (let i = 0; i < 40; i++) stepBar(bar, 0, 16) // ~640 ms: the hold is over
+  assert.ok(bar.peak < 1 && bar.peak >= bar.level)
+  for (let i = 0; i < 400; i++) stepBar(bar, 0, 16)
+  assert.equal(bar.peak, bar.level)
+})

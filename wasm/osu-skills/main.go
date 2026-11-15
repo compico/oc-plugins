@@ -16,13 +16,11 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.5.0"
+const version = "0.6.0"
 
 // Config — настройки пользователя.
 type Config struct {
 	TosuHost string `json:"tosuHost"`
-	Style    string `json:"style"`
-	Window   int    `json:"window"`
 }
 
 // svc — сервис плагина; пакетная переменная нужна обработчику ответа Fetch, который создаётся раньше присваивания.
@@ -47,19 +45,23 @@ func init() {
 		}},
 		Events: []ocplugin.EventDecl{{ID: "live", Name: "Current map", Description: "Файл карты, контрольная сумма, моды и время в карте из tosu"}},
 		// Интерфейс лежит в ui/ и упаковывается в .wasm при сборке (ocpack).
-		Widgets: []ocplugin.Widget{{ID: "graph", Name: "osu! skills graph", Entry: "index.html", Width: 520, Height: 220}},
+		Widgets: []ocplugin.Widget{{ID: "graph", Name: "osu! skills graph", Entry: "index.html", Width: 520, Height: 220,
+			// Визуальные настройки лежат в самом виджете: у каждого источника на сцене они свои. Умолчания должны совпадать с кодом ui/main.js.
+			Settings: []ocplugin.WidgetSetting{
+				{Key: "style", Label: "Стиль", Type: "select", Default: "ribbon", Options: []ocplugin.SettingOption{
+					{Value: "ribbon", Label: "Ribbon: гора, цвет по ведущему навыку"},
+					{Value: "silhouette", Label: "Silhouette: силуэт навыков, ведущий закрашен"},
+					{Value: "lines", Label: "Lines: линия на навык"},
+					{Value: "spectrum", Label: "Spectrum: столбики, текущее значение навыков"},
+				}},
+				{Key: "window", Label: "Окно точки, мс", Type: "number", Default: 5000, Min: ptr(500), Max: ptr(60000), Step: ptr(500),
+					Help: "Сколько миллисекунд карты в одной точке графика. На длинных картах больше значение — плавнее график (не влияет на spectrum)."},
+			},
+		}},
 		ConfigSchema: map[string]any{
 			"tosuHost": map[string]any{
 				"type": "string", "title": "Адрес tosu",
 				"description": "host:port, где слушает tosu. По умолчанию " + DefaultTosu + ". ",
-			},
-			"style": map[string]any{
-				"type": "string", "title": "Стиль графика",
-				"description": "ribbon — одна «гора», окрашенная доминирующим навыком (по умолчанию); silhouette — силуэт всех навыков, доминирующий закрашен своим цветом; lines — по линии на навык. После смены обновите источник в OBS.",
-			},
-			"window": map[string]any{
-				"type": "integer", "title": "Окно точки, мс",
-				"description": "Сколько миллисекунд карты в одной точке графика, 500–60000. По умолчанию 5000; на длинных картах больше значение — плавнее график.",
 			},
 		},
 	})
@@ -86,14 +88,6 @@ func init() {
 		return nil
 	})
 
-	p.POST("/settings", func(c *ocplugin.Ctx) error {
-		var cfg Config
-		if err := p.Config(&cfg); err != nil {
-			return c.Error(500, "cannot read the settings")
-		}
-		return c.JSON(200, settingsFrom(cfg))
-	})
-
 	p.POST("/curves", func(c *ocplugin.Ctx) error {
 		var req Request
 		if err := c.Bind(&req); err != nil {
@@ -103,5 +97,7 @@ func init() {
 		return c.JSON(r.Status, r.Body)
 	})
 }
+
+func ptr(v float64) *float64 { return &v }
 
 func main() {} // обязателен для сборки reactor, остаётся пустым

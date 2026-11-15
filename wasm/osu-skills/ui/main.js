@@ -1,12 +1,11 @@
 // osu! skills graph: tosu говорит, какая карта и какие моды сейчас, плагин osu-skills считает кривые навыков, виджет рисует.
 // Обычный скрипт (не модуль): из sandbox-iframe модули не загрузить, поэтому функции графика берутся из graph.js (OSUGraph).
-const { SKILLS, ALPHA_MIN, dominance, endTime, leaderAt, lineAlpha, normalizeMods, normalizeStyle, prepareSkills, smoothSegments, smoothValueAt } = OSUGraph
+const { SKILLS, ALPHA_MIN, dominance, endTime, leaderAt, lineAlpha, normalizeMods, normalizeStyle, prepareSkills, smoothSegments, smoothValueAt, stepBar, valueNear } = OSUGraph
 
-const query = new URLSearchParams(location.search)
+// Настройки виджета (форма в редакторе, значения приходят как ?style=…&window=…). Умолчания совпадают с манифестом в main.go.
 const cfg = {
-  // Настройки плагина (style, window) подгружаются в начале (loadSettings); параметры адреса виджета главнее: ?style=…&window=…
-  window: Number(query.get('window')) || 5000, // мс карты на одну точку
-  style: normalizeStyle(query.get('style')),
+  style: normalizeStyle(oc.param('style', 'ribbon')),
+  window: Math.min(60000, Math.max(500, oc.param('window', 5000))), // мс карты на одну точку
 }
 
 const canvas = document.getElementById('graph')
@@ -98,6 +97,7 @@ async function load() {
       skills = prepareSkills(res.body)
       dom = dominance(skills)
       loadedKey = key
+      dirty = true
       showStatus('')
     } else {
       skills = []
@@ -152,6 +152,7 @@ function draw() {
   }
 
   if (cfg.style === 'lines') drawLines(plot)
+  else if (cfg.style === 'spectrum') drawSpectrum(plot)
   else if (cfg.style === 'silhouette') drawSilhouette(plot)
   else drawRibbon(plot)
   ctx.globalAlpha = 1
@@ -314,6 +315,67 @@ function drawSilhouette(plot) {
   drawLegend(lead)
 }
 
+// ── spectrum: a bar per skill, the height is the skill's value right now ──
+
+const bars = new Map() // key → { level, peak, hold }
+
+/** Moves every bar towards the skill's current value; true while anything is still moving. */
+function stepBars(dt) {
+  let moving = false
+  const keep = new Set()
+  for (const s of skills) {
+    keep.add(s.key)
+    if (!bars.has(s.key)) bars.set(s.key, { level: 0, peak: 0, hold: 0 })
+    const target = Math.min(1, Math.max(0, valueNear(s.points, live.time) ?? 0))
+    if (stepBar(bars.get(s.key), target, dt)) moving = true
+  }
+  for (const key of [...bars.keys()]) if (!keep.has(key)) bars.delete(key)
+  return moving
+}
+
+const SEG = 7 // pitch of one segment of a bar, px
+const SEG_GAP = 2
+
+function drawSpectrum(plot) {
+  const labelH = 16
+  const top = PAD.top - 8
+  const floor = plot.height - labelH - 4
+  const n = skills.length
+  const gap = 10
+  const w = Math.min(54, (plot.width - PAD.left - PAD.right - gap * (n - 1)) / n)
+  const left = (plot.width - (w * n + gap * (n - 1))) / 2
+  const segs = Math.max(4, Math.floor((floor - top) / SEG))
+
+  ctx.font = '600 10px "Segoe UI", system-ui, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  skills.forEach((s, i) => {
+    const bar = bars.get(s.key) ?? { level: 0, peak: 0 }
+    const x = left + i * (w + gap)
+    const lit = Math.round(bar.level * segs)
+    const peak = Math.min(segs - 1, Math.round(bar.peak * segs))
+    for (let k = 0; k < segs; k++) {
+      const y = floor - (k + 1) * SEG + SEG_GAP
+      if (k < lit) {
+        ctx.globalAlpha = 0.55 + 0.45 * ((k + 1) / segs) // brighter towards the top
+        ctx.fillStyle = s.color
+      } else if (k === peak && peak >= lit && bar.peak > 0.02) {
+        ctx.globalAlpha = 0.95
+        ctx.fillStyle = s.color
+      } else {
+        ctx.globalAlpha = 1
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.07)'
+      }
+      ctx.fillRect(x, y, w, SEG - SEG_GAP)
+    }
+    ctx.globalAlpha = 0.9
+    ctx.fillStyle = s.color
+    ctx.fillText(s.label, x + w / 2, plot.height - labelH / 2 - 1)
+  })
+  ctx.globalAlpha = 1
+  ctx.textAlign = 'start'
+}
+
 // ── lines: one line per skill, the ones hard right now are brighter ───────
 
 function drawLines(plot) {
@@ -381,12 +443,17 @@ function drawLegend(leader, alphaOf) {
   ctx.globalAlpha = 1
 }
 
-function frame() {
+let lastFrame = 0
+
+function frame(now) {
+  const dt = lastFrame ? Math.min(now - lastFrame, 100) : 16
+  lastFrame = now
   const time = currentTime()
   if (time !== live.time) {
     live.time = time
     dirty = true
   }
+  if (cfg.style === 'spectrum' && stepBars(dt)) dirty = true
   if (dirty) {
     dirty = false
     draw()
@@ -394,22 +461,9 @@ function frame() {
   requestAnimationFrame(frame)
 }
 
-// Настройки плагина: стиль и окно точек. Параметры адреса виджета главнее. Не ответил плагин — остаются значения по умолчанию.
-async function loadSettings() {
-  try {
-    const res = await oc.plugin.post('/settings', {})
-    if (res.status !== 200 || !res.body) return
-    if (!query.has('style')) cfg.style = normalizeStyle(res.body.style)
-    if (!query.has('window') && Number(res.body.window) > 0) cfg.window = Number(res.body.window)
-  } catch {
-    // значения по умолчанию
-  }
-}
-
-oc.ready.then(async () => {
+oc.ready.then(() => {
   window.addEventListener('resize', resize)
   resize()
-  await loadSettings()
   subscribe()
   requestAnimationFrame(frame)
 }, () => showStatus('Open the widget through Overlay Composer'))
