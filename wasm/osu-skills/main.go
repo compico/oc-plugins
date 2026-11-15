@@ -1,8 +1,8 @@
 // Плагин «osu-skills» — график сложности навыков текущей карты osu! (stamina, tenacity, agility, precision, reading, memory,
 // accuracy, reaction). Объединяет tosu-оверлей osuskillsgraph и расчёт навыков go-osu: поднимать go-osu не нужно.
 //
-// Виджет опрашивает плагин (POST /state): плагин читает у tosu /json/v2 (путь к файлу карты, моды, время), потому что из
-// sandbox-iframe tosu не пускает websocket (Origin null). Затем виджет просит кривые (POST /curves). Плагин берёт файл
+// Состояние (файл карты, моды, время) хост ретранслирует из websocket tosu событием live (net.local streams): из sandbox-iframe
+// tosu websocket не пускает (Origin null), а опрос HTTP из плагина заметно грузит процессор. Виджет подписан на live и просит кривые (POST /curves). Плагин берёт файл
 // .osu у того же tosu (Fetch хоста, разрешение net.local), считает кривые библиотекой github.com/compico/go-osu/pkg и отдаёт
 // их в формате ручки go-osu /strains.
 //
@@ -16,7 +16,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.3.0"
+const version = "0.4.0"
 
 // Config — настройки пользователя.
 type Config struct {
@@ -32,7 +32,18 @@ func init() {
 		Description: "График сложности навыков текущей карты osu! (данные и файл карты — из tosu, расчёт — go-osu).",
 		Permissions: []string{ocplugin.PermNetLocal},
 		// Хост пускает плагин только на tosu и только в раздел с файлами карт.
-		NetLocal: []ocplugin.NetLocalTarget{{Target: DefaultTosu, Setting: "tosuHost", Paths: []string{MapsPath, LivePath}}},
+		NetLocal: []ocplugin.NetLocalTarget{{Target: DefaultTosu, Setting: "tosuHost", Paths: []string{MapsPath},
+			// Состояние tosu хост ретранслирует сам: держит websocket к tosu (без Origin) и публикует выбранные поля событием live,
+			// пока на него подписан виджет. wasm при этом не вызывается.
+			Streams: []ocplugin.NetLocalStream{{
+				Path: "/websocket/v2", Topic: "live", MinIntervalMs: 250,
+				Fields: map[string]string{
+					"file": "directPath.beatmapFile", "checksum": "beatmap.checksum",
+					"mods": "play.mods.name", "time": "beatmap.time.live",
+				},
+			}},
+		}},
+		Events: []ocplugin.EventDecl{{ID: "live", Name: "Current map", Description: "Файл карты, контрольная сумма, моды и время в карте из tosu"}},
 		// Интерфейс лежит в ui/ и упаковывается в .wasm при сборке (ocpack).
 		Widgets: []ocplugin.Widget{{ID: "graph", Name: "osu! skills graph", Entry: "index.html", Width: 520, Height: 220}},
 		ConfigSchema: map[string]any{
@@ -43,13 +54,9 @@ func init() {
 		},
 	})
 
-	liveBound := false
 	svc = NewService(DefaultTosu, func(id, url string) error {
 		// Ответ придёт в OnHTTPResponse: обработчик привязан к id запроса, а id — к карте (или к опросу состояния).
-		if id != liveID || !liveBound {
-			liveBound = liveBound || id == liveID
-			p.OnHTTPResponse(id, func(r ocplugin.HTTPResponse) { svc.OnFetched(r.ID, r.Status, r.Body, r.Error) })
-		}
+		p.OnHTTPResponse(id, func(r ocplugin.HTTPResponse) { svc.OnFetched(r.ID, r.Status, r.Body, r.Error) })
 		return ocplugin.Fetch(id, ocplugin.FetchRequest{URL: url})
 	}, time.Now)
 
@@ -67,11 +74,6 @@ func init() {
 			}
 		}
 		return nil
-	})
-
-	p.POST("/state", func(c *ocplugin.Ctx) error {
-		r := svc.State()
-		return c.JSON(r.Status, r.Body)
 	})
 
 	p.POST("/curves", func(c *ocplugin.Ctx) error {
