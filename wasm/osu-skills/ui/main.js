@@ -13,7 +13,7 @@ const statusEl = document.getElementById('status')
 const ctx = canvas.getContext('2d')
 
 // Что tosu говорит сейчас, и что загружено.
-const live = { id: 0, mods: '', time: 0 }
+const live = { file: '', checksum: '', mods: '', time: 0 }
 let skills = []
 let loadedKey = ''
 let generation = 0 // номер последней загрузки: устаревшие ответы отбрасываются
@@ -35,11 +35,14 @@ function connect() {
     if (!data || data.error) return
 
     live.time = data.beatmap?.time?.live ?? 0
-    const id = Number(data.beatmap?.id) || 0
+    // Файл карты берётся у самого tosu: «папка\файл.osu» относительно Songs.
+    const file = data.directPath?.beatmapFile || ''
+    const checksum = /^[0-9a-f]{32}$/i.test(data.beatmap?.checksum || '') ? data.beatmap.checksum : ''
     const mods = normalizeMods(data.play?.mods?.name)
 
-    if (id !== live.id || mods !== live.mods) {
-      live.id = id
+    if (file !== live.file || checksum !== live.checksum || mods !== live.mods) {
+      live.file = file
+      live.checksum = checksum
       live.mods = mods
       load()
     }
@@ -51,13 +54,13 @@ function connect() {
 
 // ── плагин osu-skills ─────────────────────────────────────────────────────
 
-// Плагин скачивает файл карты и считает кривые: пока он занят, отвечает 202, и запрос повторяется.
+// Плагин берёт файл карты у tosu (разрешение net.local) и считает кривые: пока он занят, отвечает 202, и запрос повторяется.
 async function load() {
   clearTimeout(retryTimer)
-  const key = `${live.id}:${live.mods}`
+  const key = `${live.file}|${live.checksum}|${live.mods}`
   if (key === loadedKey) return
   const mine = ++generation
-  if (!live.id) {
+  if (!live.file) {
     skills = []
     loadedKey = ''
     showStatus('')
@@ -68,7 +71,7 @@ async function load() {
   showStatus('Calculating…')
   const again = (ms) => { retryTimer = setTimeout(load, ms) }
   try {
-    const res = await oc.plugin.post('/curves', { id: live.id, mods: live.mods, window: cfg.window })
+    const res = await oc.plugin.post('/curves', { file: live.file, checksum: live.checksum, mods: live.mods, window: cfg.window })
     if (mine !== generation) return
     if (res.status === 202) return again(700)
     if (res.status === 200) {
