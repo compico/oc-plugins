@@ -4,7 +4,6 @@ const { SKILLS, ALPHA_MIN, endTime, lineAlpha, normalizeMods, prepareSkills, smo
 
 const query = new URLSearchParams(location.search)
 const cfg = {
-  tosu: query.get('tosu') || '127.0.0.1:24050', // где слушает tosu
   window: Number(query.get('window')) || 5000, // мс карты на одну точку
 }
 
@@ -14,42 +13,57 @@ const ctx = canvas.getContext('2d')
 
 // Что tosu говорит сейчас, и что загружено.
 const live = { file: '', checksum: '', mods: '', time: 0 }
+
 let skills = []
 let loadedKey = ''
 let generation = 0 // номер последней загрузки: устаревшие ответы отбрасываются
 let retryTimer = null
 let dirty = true
 
-// ── tosu ──────────────────────────────────────────────────────────────────
+// ── tosu (через плагин) ───────────────────────────────────────────────────
 
-function connect() {
-  const ws = new WebSocket(`ws://${cfg.tosu}/websocket/v2`)
+// tosu не пускает websocket из sandbox-iframe (Origin null, ответ 403), поэтому состояние у tosu спрашивает плагин (net.local),
+// а виджет опрашивает плагин. Между опросами время карты дорисовывается: пока оно идёт, считаем, что идёт и дальше.
+const POLL_MS = 250
+const clock = { time: 0, at: 0, moving: false }
 
-  ws.onmessage = (event) => {
-    let data
-    try {
-      data = JSON.parse(event.data)
-    } catch {
-      return
-    }
-    if (!data || data.error) return
+function applyState(data) {
+  const now = performance.now()
+  clock.moving = data.time !== clock.time && now - clock.at < 1500 && data.time > clock.time
+  clock.time = data.time
+  clock.at = now
 
-    live.time = data.beatmap?.time?.live ?? 0
-    // Файл карты берётся у самого tosu: «папка\файл.osu» относительно Songs.
-    const file = data.directPath?.beatmapFile || ''
-    const checksum = /^[0-9a-f]{32}$/i.test(data.beatmap?.checksum || '') ? data.beatmap.checksum : ''
-    const mods = normalizeMods(data.play?.mods?.name)
-
-    if (file !== live.file || checksum !== live.checksum || mods !== live.mods) {
-      live.file = file
-      live.checksum = checksum
-      live.mods = mods
-      load()
-    }
-    dirty = true
+  const file = data.file || ''
+  const checksum = /^[0-9a-f]{32}$/i.test(data.checksum || '') ? data.checksum : ''
+  const mods = normalizeMods(data.mods)
+  if (file !== live.file || checksum !== live.checksum || mods !== live.mods) {
+    live.file = file
+    live.checksum = checksum
+    live.mods = mods
+    load()
   }
-  ws.onclose = () => setTimeout(connect, 1000)
-  ws.onerror = () => ws.close()
+}
+
+function currentTime() {
+  return clock.moving ? clock.time + (performance.now() - clock.at) : clock.time
+}
+
+async function poll() {
+  try {
+    const res = await oc.plugin.post('/state', {})
+    if (res.status === 200 && res.body) {
+      applyState(res.body)
+      if (statusEl.dataset.src === 'state') showStatus('')
+    } else if (res.status !== 202) {
+      skills = []
+      loadedKey = ''
+      live.file = live.checksum = live.mods = ''
+      showStatus(res.body?.error || `Plugin error (HTTP ${res.status})`, 'state')
+    }
+  } catch {
+    showStatus('The osu-skills plugin is not responding. Open the widget through Overlay Composer.', 'state')
+  }
+  setTimeout(poll, POLL_MS)
 }
 
 // ── плагин osu-skills ─────────────────────────────────────────────────────
@@ -93,7 +107,8 @@ async function load() {
   dirty = true
 }
 
-function showStatus(text) {
+function showStatus(text, src = 'load') {
+  statusEl.dataset.src = src
   statusEl.textContent = text
   statusEl.hidden = text === ''
 }
@@ -187,6 +202,11 @@ function drawLegend(ordered) {
 }
 
 function frame() {
+  const time = currentTime()
+  if (time !== live.time) {
+    live.time = time
+    dirty = true
+  }
   if (dirty) {
     dirty = false
     draw()
@@ -197,6 +217,6 @@ function frame() {
 oc.ready.then(() => {
   window.addEventListener('resize', resize)
   resize()
-  connect()
+  poll()
   requestAnimationFrame(frame)
 }, () => showStatus('Open the widget through Overlay Composer'))
