@@ -20,12 +20,13 @@ let generation = 0 // номер последней загрузки: устар
 let retryTimer = null
 let dirty = true
 
-// ── tosu (через плагин) ───────────────────────────────────────────────────
+// ── tosu (ретранслятор хоста) ─────────────────────────────────────────────
 
-// tosu не пускает websocket из sandbox-iframe (Origin null, ответ 403), поэтому состояние у tosu спрашивает плагин (net.local),
-// а виджет опрашивает плагин. Между опросами время карты дорисовывается: пока оно идёт, считаем, что идёт и дальше.
-const POLL_MS = 250
+// tosu не пускает websocket из sandbox-iframe (Origin null, ответ 403), а опрос HTTP из плагина грузит процессор. Поэтому
+// хост OC сам держит websocket к tosu, пока виджет подписан на событие live, и присылает только нужные поля (не чаще 4 раз в секунду).
+// Между событиями время карты дорисовывается: пока оно идёт, считаем, что идёт и дальше.
 const clock = { time: 0, at: 0, moving: false }
+let gotState = false
 
 function applyState(data) {
   const now = performance.now()
@@ -45,25 +46,22 @@ function applyState(data) {
 }
 
 function currentTime() {
-  return clock.moving ? clock.time + (performance.now() - clock.at) : clock.time
+  const since = performance.now() - clock.at
+  // Событий нет дольше 1,5 с — пауза (tosu присылает время только пока оно меняется): не убегаем вперёд.
+  return clock.moving && since < 1500 ? clock.time + since : clock.time
 }
 
-async function poll() {
-  try {
-    const res = await oc.plugin.post('/state', {})
-    if (res.status === 200 && res.body) {
-      applyState(res.body)
-      if (statusEl.dataset.src === 'state') showStatus('')
-    } else if (res.status !== 202) {
-      skills = []
-      loadedKey = ''
-      live.file = live.checksum = live.mods = ''
-      showStatus(res.body?.error || `Plugin error (HTTP ${res.status})`, 'state')
-    }
-  } catch {
-    showStatus('The osu-skills plugin is not responding. Open the widget through Overlay Composer.', 'state')
-  }
-  setTimeout(poll, POLL_MS)
+function subscribe() {
+  oc.plugin.subscribe('live', (e) => {
+    if (!e?.data) return
+    gotState = true
+    if (statusEl.dataset.src === 'state') showStatus('')
+    applyState(e.data)
+  })
+  // tosu не запущен (или хост не подключился): событий нет вовсе.
+  setTimeout(() => {
+    if (!gotState) showStatus('Waiting for tosu…', 'state')
+  }, 4000)
 }
 
 // ── плагин osu-skills ─────────────────────────────────────────────────────
@@ -217,6 +215,6 @@ function frame() {
 oc.ready.then(() => {
   window.addEventListener('resize', resize)
   resize()
-  poll()
+  subscribe()
   requestAnimationFrame(frame)
 }, () => showStatus('Open the widget through Overlay Composer'))

@@ -79,7 +79,6 @@ type Service struct {
 	byFetch map[string]string
 	maps    lru[string, *osu.Beatmap]
 	results lru[string, Response]
-	live    live
 }
 
 func NewService(tosu string, fetch func(id, url string) error, now func() time.Time) *Service {
@@ -174,10 +173,6 @@ func (s *Service) Curves(req Request) Reply {
 
 // OnFetched принимает ответ хоста на Fetch(fid): разбирает .osu и кладёт карту в кэш.
 func (s *Service) OnFetched(fid string, status int, body, fetchErr string) {
-	if fid == liveID {
-		s.onLive(status, body, fetchErr)
-		return
-	}
 	key := s.byFetch[fid]
 	j := s.jobs[key]
 	if j == nil {
