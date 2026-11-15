@@ -219,7 +219,7 @@ function smoothValueAt(points, time) {
 }
 
 /** Drawing styles of the widget. */
-const STYLES = ['ribbon', 'silhouette', 'lines']
+const STYLES = ['ribbon', 'silhouette', 'lines', 'spectrum']
 const DEFAULT_STYLE = 'ribbon'
 
 /** An unknown or empty style name falls back to the default one. */
@@ -324,7 +324,35 @@ function leaderAt(dom, time) {
   return dom.leaders[lo]
 }
 
-  const api = { SKILLS, STYLES, DEFAULT_STYLE, ALPHA_MIN, ALPHA_CUMULATIVE, normalizeMods, prepareSkills, endTime, valueNear, lineAlpha, smoothSegments, smoothValueAt, normalizeStyle, dominance, leaderAt }
+// ── spectrum: столбики с плавным движением ─────────────────────────────────
+
+const ATTACK_MS = 70 // как быстро столбик растёт к новому значению (постоянная времени)
+const RELEASE_MS = 280 // как быстро опускается
+const PEAK_HOLD_MS = 500 // сколько метка пика стоит на месте
+const PEAK_FALL = 0.55 // потом падает: доли высоты в секунду
+
+/**
+ * Один шаг анимации столбика за dt мс: уровень догоняет цель (вверх быстрее, чем вниз), метка пика держится и падает.
+ * bar = { level, peak, hold } меняется на месте; возвращает true, если что-то сдвинулось (тогда нужна перерисовка).
+ */
+function stepBar(bar, target, dt) {
+  const before = bar.level + bar.peak * 7
+  const tau = target > bar.level ? ATTACK_MS : RELEASE_MS
+  bar.level += (target - bar.level) * (1 - Math.exp(-Math.max(dt, 0) / tau))
+  if (Math.abs(target - bar.level) < 0.001) bar.level = target
+
+  if (bar.level >= bar.peak) {
+    bar.peak = bar.level
+    bar.hold = PEAK_HOLD_MS
+  } else if (bar.hold > 0) {
+    bar.hold -= dt
+  } else {
+    bar.peak = Math.max(bar.level, bar.peak - (PEAK_FALL * dt) / 1000)
+  }
+  return bar.level + bar.peak * 7 !== before
+}
+
+  const api = { SKILLS, STYLES, DEFAULT_STYLE, ALPHA_MIN, ALPHA_CUMULATIVE, normalizeMods, prepareSkills, endTime, valueNear, lineAlpha, smoothSegments, smoothValueAt, normalizeStyle, dominance, leaderAt, stepBar }
   if (typeof module === 'object' && module.exports) module.exports = api
   else root.OSUGraph = api
 })(globalThis)
