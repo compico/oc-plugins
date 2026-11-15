@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>osu! skills graph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  #root { position: relative; width: 100vw; height: 100vh; font-family: "Segoe UI", system-ui, sans-serif; }
+  #graph { width: 100%; height: 100%; display: block; }
+  #status {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+    padding: 0 16px; font-size: 13px; color: #fff; text-shadow: 0 1px 3px #000;
+  }
+  #status[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div id="root">
+  <canvas id="graph"></canvas>
+  <div id="status" hidden></div>
+</div>
+<script src="/plugin-sdk/oc.js"></script>
+<script src="graph.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

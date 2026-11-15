@@ -1,0 +1,4 @@
+github.com/compico/go-osu/pkg v0.0.0-20261114193228-557756190618 h1:w3qOgSXd+GmgYWpHoG70ODgnrp+yqO2uuFokuFwrTEo=
+github.com/compico/go-osu/pkg v0.0.0-20261114193228-557756190618/go.mod h1:X0waiO2D3zVzGGK2xdeRI6+GZQYGjK8GxIAxewiXgw4=
+github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261111082635-eefbbf21c574 h1:M5rRNWnFuKw1n8Bc1gMSB2YBHhfJ6KhfRJ4E5kPQANY=
+github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261111082635-eefbbf21c574/go.mod h1:vN3OMuM6MaySeVreHAbDOPmokRzSbam0GCq8UerWCvw=
