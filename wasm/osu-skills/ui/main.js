@@ -52,11 +52,12 @@ function currentTime() {
 }
 
 function subscribe() {
-  oc.plugin.subscribe('live', (e) => {
-    if (!e?.data) return
+  // SDK зовёт обработчик как (data, meta): данные события — первый аргумент.
+  oc.plugin.subscribe('live', (data) => {
+    if (!data || typeof data !== 'object') return
     gotState = true
     if (statusEl.dataset.src === 'state') showStatus('')
-    applyState(e.data)
+    applyState(data)
   })
   // tosu не запущен (или хост не подключился): событий нет вовсе.
   setTimeout(() => {
