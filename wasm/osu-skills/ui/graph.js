@@ -218,7 +218,113 @@ function smoothValueAt(points, time) {
   return at(u, from.value, s.c1.value, s.c2.value, s.to.value)
 }
 
-  const api = { SKILLS, ALPHA_MIN, ALPHA_CUMULATIVE, normalizeMods, prepareSkills, endTime, valueNear, lineAlpha, smoothSegments, smoothValueAt }
+/** Drawing styles of the widget. */
+const STYLES = ['ribbon', 'silhouette', 'lines']
+const DEFAULT_STYLE = 'ribbon'
+
+/** An unknown or empty style name falls back to the default one. */
+function normalizeStyle(name) {
+  const s = typeof name === 'string' ? name.trim().toLowerCase() : ''
+  return STYLES.includes(s) ? s : DEFAULT_STYLE
+}
+
+// A challenger takes the lead only if it is this much above the current leader (no flicker between close skills).
+const LEAD_MARGIN = 1.15
+// A leader that holds for fewer windows than this is absorbed by its neighbour.
+const LEAD_MIN_RUN = 3
+
+/**
+ * Which skill dominates where, calm enough to colour a graph with.
+ *
+ * The cumulative curve (memory) does not take part: it has no "moment" of its own. For every point the values are blurred
+ * with the neighbouring windows, the leader changes only when a challenger is LEAD_MARGIN times above it (hysteresis),
+ * and a leader that holds for less than LEAD_MIN_RUN windows is given to its neighbour. The result:
+ *   times     — the points' times (those of the first skill),
+ *   envelope  — the highest value of any skill at every point ({time, value}), the silhouette of the map,
+ *   leaders   — the leading skill's key at every point,
+ *   runs      — the same as {key, from, to} (indexes of points, inclusive),
+ *   weights   — per skill key: 0..1 at every point, 1 where it leads, with soft edges (for colour gradients).
+ * Empty when there is no skill that can lead.
+ */
+function dominance(skills) {
+  const cand = skills.filter((s) => !s.cumulative && s.points.length > 0)
+  if (cand.length === 0) return { times: [], envelope: [], leaders: [], runs: [], weights: {} }
+
+  const times = cand[0].points.map((p) => p.time)
+  const n = times.length
+  const raw = cand.map((s) => times.map((t) => valueNear(s.points, t)))
+  const blur = (arr) => arr.map((v, i) => 0.25 * arr[Math.max(0, i - 1)] + 0.5 * v + 0.25 * arr[Math.min(n - 1, i + 1)])
+  const soft = raw.map(blur)
+
+  const best = (i) => {
+    let k = 0
+    for (let j = 1; j < cand.length; j++) if (soft[j][i] > soft[k][i]) k = j
+    return k
+  }
+  const lead = new Array(n)
+  let cur = best(0)
+  for (let i = 0; i < n; i++) {
+    const b = best(i)
+    if (b !== cur && soft[b][i] > soft[cur][i] * LEAD_MARGIN) cur = b
+    lead[i] = cur
+  }
+
+  // Absorb runs that are too short: the shortest first, into the stronger neighbour.
+  const toRuns = () => {
+    const r = []
+    for (let i = 0; i < n; i++) {
+      if (r.length && r[r.length - 1].k === lead[i]) r[r.length - 1].to = i
+      else r.push({ k: lead[i], from: i, to: i })
+    }
+    return r
+  }
+  for (let guard = 0; guard < n; guard++) {
+    const r = toRuns()
+    if (r.length < 2) break
+    let s = -1
+    for (let i = 0; i < r.length; i++) if (r[i].to - r[i].from + 1 < LEAD_MIN_RUN && (s < 0 || r[i].to - r[i].from < r[s].to - r[s].from)) s = i
+    if (s < 0) break
+    const mean = (run) => {
+      let sum = 0
+      for (let i = run.from; i <= run.to; i++) sum += soft[run.k][i]
+      return sum / (run.to - run.from + 1)
+    }
+    const prev = r[s - 1]
+    const next = r[s + 1]
+    const into = !prev ? next : !next ? prev : mean(prev) >= mean(next) ? prev : next
+    for (let i = r[s].from; i <= r[s].to; i++) lead[i] = into.k
+  }
+
+  const runs = toRuns().map((r) => ({ key: cand[r.k].key, from: r.from, to: r.to }))
+  const leaders = lead.map((k) => cand[k].key)
+  const envelope = times.map((time, i) => ({ time, value: Math.max(...raw.map((r) => r[i])) }))
+
+  const weights = {}
+  for (const s of cand) {
+    let w = leaders.map((k) => (k === s.key ? 1 : 0))
+    if (w.some((v) => v > 0)) {
+      w = blur(blur(w))
+      weights[s.key] = w
+    }
+  }
+  return { times, envelope, leaders, runs, weights }
+}
+
+/** The leading skill's key at `time` (the nearest point); null when nobody leads. */
+function leaderAt(dom, time) {
+  if (dom.times.length === 0) return null
+  let lo = 0
+  let hi = dom.times.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (dom.times[mid] < time) lo = mid + 1
+    else hi = mid
+  }
+  if (lo > 0 && time - dom.times[lo - 1] <= dom.times[lo] - time) lo--
+  return dom.leaders[lo]
+}
+
+  const api = { SKILLS, STYLES, DEFAULT_STYLE, ALPHA_MIN, ALPHA_CUMULATIVE, normalizeMods, prepareSkills, endTime, valueNear, lineAlpha, smoothSegments, smoothValueAt, normalizeStyle, dominance, leaderAt }
   if (typeof module === 'object' && module.exports) module.exports = api
   else root.OSUGraph = api
 })(globalThis)

@@ -16,11 +16,13 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.4.1"
+const version = "0.5.0"
 
 // Config — настройки пользователя.
 type Config struct {
 	TosuHost string `json:"tosuHost"`
+	Style    string `json:"style"`
+	Window   int    `json:"window"`
 }
 
 // svc — сервис плагина; пакетная переменная нужна обработчику ответа Fetch, который создаётся раньше присваивания.
@@ -51,6 +53,14 @@ func init() {
 				"type": "string", "title": "Адрес tosu",
 				"description": "host:port, где слушает tosu. По умолчанию " + DefaultTosu + ". ",
 			},
+			"style": map[string]any{
+				"type": "string", "title": "Стиль графика",
+				"description": "ribbon — одна «гора», окрашенная доминирующим навыком (по умолчанию); silhouette — силуэт всех навыков, доминирующий закрашен своим цветом; lines — по линии на навык. После смены обновите источник в OBS.",
+			},
+			"window": map[string]any{
+				"type": "integer", "title": "Окно точки, мс",
+				"description": "Сколько миллисекунд карты в одной точке графика, 500–60000. По умолчанию 5000; на длинных картах больше значение — плавнее график.",
+			},
 		},
 	})
 
@@ -74,6 +84,14 @@ func init() {
 			}
 		}
 		return nil
+	})
+
+	p.POST("/settings", func(c *ocplugin.Ctx) error {
+		var cfg Config
+		if err := p.Config(&cfg); err != nil {
+			return c.Error(500, "cannot read the settings")
+		}
+		return c.JSON(200, settingsFrom(cfg))
 	})
 
 	p.POST("/curves", func(c *ocplugin.Ctx) error {

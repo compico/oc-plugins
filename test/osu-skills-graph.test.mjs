@@ -184,3 +184,60 @@ test('smoothValueAt is on the curve: the points\' values at their times, the cur
   assert.equal(smoothValueAt([], 0), null)
   assert.equal(smoothValueAt(pts([10, 7]), 500), 7)
 })
+
+// ── стили и доминирование ────────────────────────────────────────────────
+
+const { dominance, leaderAt, normalizeStyle, STYLES, DEFAULT_STYLE } = createRequire(import.meta.url)('../wasm/osu-skills/ui/graph.js')
+
+const curve = (key, values, extra = {}) => ({ key, ...extra, points: values.map((value, i) => ({ time: i * 1000, value })) })
+
+test('normalizeStyle: known names, anything else is the default', () => {
+  for (const s of STYLES) assert.equal(normalizeStyle(s), s)
+  assert.equal(normalizeStyle(' Silhouette '), 'silhouette')
+  for (const bad of ['', 'x', undefined, null, 5]) assert.equal(normalizeStyle(bad), DEFAULT_STYLE)
+})
+
+test('dominance: the leader follows the highest skill, runs cover every point', () => {
+  const a = curve('stamina', [9, 9, 9, 9, 9, 1, 1, 1, 1, 1])
+  const b = curve('agility', [1, 1, 1, 1, 1, 9, 9, 9, 9, 9])
+  const d = dominance([a, b])
+  assert.deepEqual(d.leaders, ['stamina', 'stamina', 'stamina', 'stamina', 'stamina', 'agility', 'agility', 'agility', 'agility', 'agility'])
+  assert.deepEqual(d.runs, [{ key: 'stamina', from: 0, to: 4 }, { key: 'agility', from: 5, to: 9 }])
+  assert.deepEqual(d.envelope.map((p) => p.value), [9, 9, 9, 9, 9, 9, 9, 9, 9, 9])
+  assert.equal(d.weights.stamina[0], 1)
+  assert.equal(d.weights.agility[9], 1)
+  assert.ok(d.weights.stamina[5] > 0 && d.weights.stamina[5] < 1, 'edges are soft')
+})
+
+test('dominance: skills that keep crossing do not flicker', () => {
+  // Two skills within a few percent of each other, swapping every point.
+  const a = curve('stamina', [10, 10.4, 10, 10.4, 10, 10.4, 10, 10.4, 10, 10.4])
+  const b = curve('agility', [10.4, 10, 10.4, 10, 10.4, 10, 10.4, 10, 10.4, 10])
+  const d = dominance([a, b])
+  assert.equal(d.runs.length, 1)
+})
+
+test('dominance: a short blip does not take the colour, a clear change does', () => {
+  const a = curve('stamina', [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5])
+  const b = curve('agility', [1, 1, 1, 1, 9, 1, 1, 1, 1, 1, 1, 1]) // one tall window
+  assert.equal(dominance([a, b]).runs.length, 1)
+  const c = curve('agility', [1, 1, 1, 1, 9, 9, 9, 9, 9, 9, 9, 9])
+  assert.deepEqual(dominance([a, c]).runs.map((r) => r.key), ['stamina', 'agility'])
+})
+
+test('dominance: the cumulative curve never leads; no skills — nothing to colour', () => {
+  const mem = curve('memory', [100, 100, 100, 100], { cumulative: true })
+  const a = curve('stamina', [1, 1, 1, 1])
+  assert.deepEqual(dominance([mem, a]).leaders, ['stamina', 'stamina', 'stamina', 'stamina'])
+  const none = dominance([mem])
+  assert.deepEqual(none.runs, [])
+  assert.equal(leaderAt(none, 0), null)
+})
+
+test('leaderAt: the leader of the window the time is in', () => {
+  const d = dominance([curve('stamina', [9, 9, 9, 9, 1, 1, 1, 1]), curve('agility', [1, 1, 1, 1, 9, 9, 9, 9])])
+  assert.equal(leaderAt(d, 500), 'stamina')
+  assert.equal(leaderAt(d, 6000), 'agility')
+  assert.equal(leaderAt(d, 999999), 'agility')
+  assert.equal(leaderAt(d, -5), 'stamina')
+})
