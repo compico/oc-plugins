@@ -210,3 +210,26 @@ func TestValidTosu(t *testing.T) {
 		}
 	}
 }
+
+func TestSmallWindowAndAutoCoarsening(t *testing.T) {
+	s, h := newTestService()
+	s.Curves(Request{File: testFile})
+	h.answer(s, 200, testMap(), "")
+	fine := s.Curves(Request{File: testFile, Window: 200}).Body.(Response)
+	if fine.Window != 200 || len(fine.Stamina) < 100 {
+		t.Fatalf("мелкое окно: window %d, точек %d", fine.Window, len(fine.Stamina))
+	}
+	for _, w := range []int{-1, 10, 49, maxWindow + 1} {
+		if r := s.Curves(Request{File: testFile, Window: w}); r.Status != http.StatusBadRequest {
+			t.Errorf("window %d: %d, ждали 400", w, r.Status)
+		}
+	}
+	// Ответ не помещается — окно укрупняется, пока точек не станет достаточно мало.
+	old := maxPoints
+	maxPoints = 300
+	defer func() { maxPoints = old }()
+	coarse := s.Curves(Request{File: testFile, Window: 100}).Body.(Response)
+	if coarse.Window <= 100 || coarse.points() > maxPoints {
+		t.Fatalf("укрупнение: window %d, точек %d", coarse.Window, coarse.points())
+	}
+}
