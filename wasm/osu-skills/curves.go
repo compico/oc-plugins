@@ -19,6 +19,7 @@ import (
 const (
 	defaultWindow = 5000             // мс карты на одну точку графика (как у ручки go-osu)
 	maxWindow     = 60000            // как у ручки go-osu
+	minWindow     = 50               // мельче не нужно: точек больше, чем объектов
 	maxMapBytes   = 8 << 20          // как лимит ответа хоста для net.local
 	failTTL       = 30 * time.Second // сколько помнить неудачную загрузку карты, чтобы не бомбить источник опросом виджета
 	resultsCap    = 16
@@ -139,8 +140,8 @@ func (s *Service) Curves(req Request) Reply {
 	if window == 0 {
 		window = defaultWindow
 	}
-	if window < 0 || window > maxWindow {
-		return errReply(http.StatusBadRequest, "window must be between 0 and 60000 ms")
+	if window < 0 || window > maxWindow || (window != 0 && window < minWindow) {
+		return errReply(http.StatusBadRequest, "window must be between 50 and 60000 ms")
 	}
 
 	mk := mapKey(req)
@@ -200,8 +201,27 @@ func (s *Service) OnFetched(fid string, status int, body, fetchErr string) {
 	}
 }
 
+// maxPoints — сколько точек (по всем навыкам) помещается в ответ: маршрут отдаёт JSON до 1 МиБ, точка весит около 32 байт.
+var maxPoints = 28000
+
+func (r Response) points() int {
+	return len(r.Stamina) + len(r.Tenacity) + len(r.Agility) + len(r.Precision) + len(r.Reading) + len(r.Memory) + len(r.Accuracy) + len(r.Reaction)
+}
+
+// compute считает кривые с окном window. Если точек слишком много для ответа (мелкое окно на очень длинной карте),
+// окно удваивается, пока ответ не поместится; в ответе Window — фактическое.
 func compute(bm *osu.Beatmap, m osu.Mod, window int) Response {
 	c := skills.ProcessCurves(bm, m, skills.NewVars())
+	for {
+		r := resample(c, window)
+		if r.points() <= maxPoints || window >= maxWindow {
+			return r
+		}
+		window = min(window*2, maxWindow)
+	}
+}
+
+func resample(c *skills.Curves, window int) Response {
 	windows := skills.WindowCount(window, c.Speed, c.Stamina, c.Tenacity, c.Agility, c.Precision, c.Reading, c.Memory, c.Accuracy, c.Reaction)
 	rs := func(points []skills.StrainPoint, carry bool) []skills.StrainPoint {
 		if len(points) == 0 { // кривой нет у этой карты (память без FL) — пустой список, а не нули

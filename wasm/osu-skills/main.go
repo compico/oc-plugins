@@ -16,7 +16,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.6.0"
+const version = "0.6.1"
 
 // Config — настройки пользователя.
 type Config struct {

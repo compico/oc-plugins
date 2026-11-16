@@ -1,6 +1,6 @@
 // osu! skills graph: tosu говорит, какая карта и какие моды сейчас, плагин osu-skills считает кривые навыков, виджет рисует.
 // Обычный скрипт (не модуль): из sandbox-iframe модули не загрузить, поэтому функции графика берутся из graph.js (OSUGraph).
-const { SKILLS, ALPHA_MIN, dominance, endTime, leaderAt, lineAlpha, normalizeMods, normalizeStyle, prepareSkills, smoothSegments, smoothValueAt, stepBar, valueNear } = OSUGraph
+const { SKILLS, ALPHA_MIN, dominance, endTime, leaderAt, lineAlpha, normalizeMods, normalizeStyle, prepareSkills, smoothSegments, smoothValueAt, stepBar, valueLerp } = OSUGraph
 
 // Настройки виджета (форма в редакторе, значения приходят как ?style=…&window=…). Умолчания совпадают с манифестом в main.go.
 const cfg = {
@@ -90,7 +90,7 @@ async function load() {
   showStatus('Calculating…')
   const again = (ms) => { retryTimer = setTimeout(load, ms) }
   try {
-    const res = await oc.plugin.post('/curves', { file: live.file, checksum: live.checksum, mods: live.mods, window: cfg.window })
+    const res = await oc.plugin.post('/curves', { file: live.file, checksum: live.checksum, mods: live.mods, window: curveWindow() })
     if (mine !== generation) return
     if (res.status === 202) return again(700)
     if (res.status === 200) {
@@ -157,6 +157,10 @@ function draw() {
   else drawRibbon(plot)
   ctx.globalAlpha = 1
 }
+
+// Окно точек для плагина: у графиков — настройка виджета (5 с по умолчанию), у spectrum мелкое, чтобы столбики двигались в такт карте.
+const SPECTRUM_WINDOW = 200
+const curveWindow = () => (cfg.style === 'spectrum' ? SPECTRUM_WINDOW : cfg.window)
 
 const colorOf = (key) => SKILLS.find((s) => s.key === key)?.color ?? '#fff'
 
@@ -326,7 +330,7 @@ function stepBars(dt) {
   for (const s of skills) {
     keep.add(s.key)
     if (!bars.has(s.key)) bars.set(s.key, { level: 0, peak: 0, hold: 0 })
-    const target = Math.min(1, Math.max(0, valueNear(s.points, live.time) ?? 0))
+    const target = Math.min(1, Math.max(0, valueLerp(s.points, live.time) ?? 0))
     if (stepBar(bars.get(s.key), target, dt)) moving = true
   }
   for (const key of [...bars.keys()]) if (!keep.has(key)) bars.delete(key)

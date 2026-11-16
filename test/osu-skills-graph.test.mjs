@@ -271,3 +271,14 @@ test('stepBar: the peak holds, then falls, and never drops below the level', () 
   for (let i = 0; i < 400; i++) stepBar(bar, 0, 16)
   assert.equal(bar.peak, bar.level)
 })
+
+test('valueLerp: linear between points, ends are held, empty curve is null', () => {
+  const { valueLerp } = createRequire(import.meta.url)('../wasm/osu-skills/ui/graph.js')
+  const pts = [{ time: 0, value: 0 }, { time: 1000, value: 100 }, { time: 2000, value: 50 }]
+  assert.equal(valueLerp(pts, 500), 50)
+  assert.equal(valueLerp(pts, 1500), 75)
+  assert.equal(valueLerp(pts, 1000), 100)
+  assert.equal(valueLerp(pts, -10), 0)
+  assert.equal(valueLerp(pts, 9999), 50)
+  assert.equal(valueLerp([], 5), null)
+})

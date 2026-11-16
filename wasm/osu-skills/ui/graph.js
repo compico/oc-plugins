@@ -91,6 +91,22 @@ function endTime(skills) {
  * are on a uniform grid with a point in the middle of every window, so this is
  * the value of the window the time is in. Null for an empty curve.
  */
+/** The value at `time` between the two neighbouring points (linear); outside the curve — the nearest end. null for an empty curve. */
+function valueLerp(points, time) {
+  if (points.length === 0) return null
+  let lo = 0
+  let hi = points.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (points[mid].time < time) lo = mid + 1
+    else hi = mid
+  }
+  if (lo === 0 || points[lo].time <= time) return points[lo].value
+  const a = points[lo - 1]
+  const b = points[lo]
+  return a.value + ((b.value - a.value) * (time - a.time)) / (b.time - a.time)
+}
+
 function valueNear(points, time) {
   if (points.length === 0) return null
 
@@ -326,7 +342,7 @@ function leaderAt(dom, time) {
 
 // ── spectrum: столбики с плавным движением ─────────────────────────────────
 
-const ATTACK_MS = 70 // как быстро столбик растёт к новому значению (постоянная времени)
+const ATTACK_MS = 50 // как быстро столбик растёт к новому значению (постоянная времени)
 const RELEASE_MS = 280 // как быстро опускается
 const PEAK_HOLD_MS = 500 // сколько метка пика стоит на месте
 const PEAK_FALL = 0.55 // потом падает: доли высоты в секунду
@@ -352,7 +368,7 @@ function stepBar(bar, target, dt) {
   return bar.level + bar.peak * 7 !== before
 }
 
-  const api = { SKILLS, STYLES, DEFAULT_STYLE, ALPHA_MIN, ALPHA_CUMULATIVE, normalizeMods, prepareSkills, endTime, valueNear, lineAlpha, smoothSegments, smoothValueAt, normalizeStyle, dominance, leaderAt, stepBar }
+  const api = { SKILLS, STYLES, DEFAULT_STYLE, ALPHA_MIN, ALPHA_CUMULATIVE, normalizeMods, prepareSkills, endTime, valueNear, valueLerp, lineAlpha, smoothSegments, smoothValueAt, normalizeStyle, dominance, leaderAt, stepBar }
   if (typeof module === 'object' && module.exports) module.exports = api
   else root.OSUGraph = api
 })(globalThis)
