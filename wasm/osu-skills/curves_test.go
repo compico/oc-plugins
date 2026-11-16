@@ -233,3 +233,29 @@ func TestSmallWindowAndAutoCoarsening(t *testing.T) {
 		t.Fatalf("укрупнение: window %d, точек %d", coarse.Window, coarse.points())
 	}
 }
+
+func TestLazerPaths(t *testing.T) {
+	const hash = "8f50d551e6cba867060e0d638e72a016843d24e123e94e112d8a71cf5ea9191a"
+	s, h := newTestService()
+	if r := s.Curves(Request{File: `8\8f\` + hash}); r.Status != http.StatusAccepted {
+		t.Fatalf("lazer: %d %v", r.Status, r.Body)
+	}
+	if want := "http://127.0.0.1:24050/files/beatmap/8/8f/" + hash; len(h.urls) != 1 || h.urls[0] != want {
+		t.Fatalf("адрес: %v, ждали %s", h.urls, want)
+	}
+	h.answer(s, 200, testMap(), "")
+	if r := s.Curves(Request{File: `8\8f\` + hash}); r.Status != http.StatusOK {
+		t.Fatalf("после загрузки: %d", r.Status)
+	}
+	if r := s.Curves(Request{File: "ab/cd/" + hash}); r.Status != http.StatusAccepted { // другие разделители, две буквы
+		t.Fatalf("%d", r.Status)
+	}
+	for _, bad := range []string{
+		hash, "8/8f/" + hash[:63], "8/8f/" + hash + "0", "8/8f/" + strings.ToUpper(hash), "x/8f/" + hash, "8/8f/../" + hash,
+		"8/8f/" + hash + "/x", "/8/8f/" + hash, `\\srv\8\8f\` + hash, "8/8f/" + hash[:60] + "..ab",
+	} {
+		if r := s.Curves(Request{File: bad}); r.Status != http.StatusBadRequest {
+			t.Errorf("%q: %d, ждали 400", bad, r.Status)
+		}
+	}
+}
