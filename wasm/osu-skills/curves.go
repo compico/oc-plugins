@@ -94,10 +94,14 @@ func ValidTosu(s string) bool { return hostPortRe.MatchString(s) }
 
 var checksumRe = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
 
-// mapURL строит адрес файла у tosu из пути вида «папка\файл.osu» (разделители Windows тоже принимаются).
+// lazerPathRe — путь к карте в хранилище osu!lazer: хэш файла без расширения, «8\8f\8f50d5…» (первая буква, две, весь SHA-256).
+var lazerPathRe = regexp.MustCompile(`^[0-9a-f]{1,2}[/\\][0-9a-f]{2}[/\\][0-9a-f]{64}$`)
+
+// mapURL строит адрес файла у tosu из пути вида «папка\файл.osu» (stable) или «8\8f\<хэш>» (lazer); разделители Windows тоже принимаются.
 // Путь проверяется здесь, а не только хостом: виджет — чужой код, он не должен выводить плагин за раздел с картами.
 func (s *Service) mapURL(file string) (string, bool) {
-	if file == "" || len(file) > 512 || !strings.HasSuffix(strings.ToLower(file), ".osu") {
+	osuFile := strings.HasSuffix(strings.ToLower(file), ".osu")
+	if file == "" || len(file) > 512 || !(osuFile || lazerPathRe.MatchString(file)) {
 		return "", false
 	}
 	var segs []string
@@ -107,7 +111,7 @@ func (s *Service) mapURL(file string) (string, bool) {
 		}
 		segs = append(segs, url.PathEscape(seg))
 	}
-	if n := len(segs); n == 0 || strings.EqualFold(segs[n-1], ".osu") {
+	if n := len(segs); n == 0 || (osuFile && strings.EqualFold(segs[n-1], ".osu")) {
 		return "", false // имя файла не может состоять только из расширения
 	}
 	if len(segs) == 0 || strings.HasPrefix(file, "/") || strings.HasPrefix(file, "\\") {
