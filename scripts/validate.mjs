@@ -2,6 +2,7 @@
 // Правила повторяют проверки Overlay Composer (internal/plugins), чтобы ошибка находилась до установки.
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { checkDeprecated } from "./deprecated.mjs";
 
 const ROOT = new URL("../plugins/", import.meta.url).pathname;
 const TYPES = new Set(["string", "text", "number", "range", "bool", "color", "font", "select"]);
@@ -86,6 +87,20 @@ for (const dir of readdirSync(ROOT).filter((d) => statSync(join(ROOT, d)).isDire
     if (s.type === "select" && s.default !== undefined && !s.options?.some((o) => o.value === s.default)) err(dir, `${where}: default не из options`);
     if ((s.type === "number" || s.type === "range") && s.default !== undefined && typeof s.default !== "number") err(dir, `${where}: default должен быть числом`);
     if (s.type === "bool" && s.default !== undefined && typeof s.default !== "boolean") err(dir, `${where}: default должен быть boolean`);
+  }
+}
+
+// deprecated.json в корне репозитория (необязателен): устаревшие плагины и их замена.
+{
+  const f = new URL("../deprecated.json", import.meta.url).pathname;
+  if (existsSync(f)) {
+    let list;
+    try { list = JSON.parse(readFileSync(f, "utf8")); } catch (e) { errors.push("deprecated.json: " + e.message); }
+    if (list !== undefined) {
+      const WASM = new URL("../wasm/", import.meta.url).pathname;
+      const exists = (kind, id) => existsSync(join(kind === "widget" ? ROOT : WASM, id, kind === "widget" ? "plugin.json" : "go.mod"));
+      errors.push(...checkDeprecated(list, exists));
+    }
   }
 }
 
