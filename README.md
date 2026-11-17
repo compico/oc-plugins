@@ -7,7 +7,7 @@
 
 | Плагин | Что делает | Разрешения |
 |---|---|---|
-| [`osu-np`](plugins/osu-np) | на `!np` отвечает в чате ссылкой на текущую карту osu! (данные из tosu) | `chat.read`, `chat.send`, `net.local` |
+| [`osu-np`](plugins/osu-np) | **устарел, заменён [`osu-tools`](wasm/osu-tools).** На `!np` отвечает в чате ссылкой на текущую карту osu! (данные из tosu) | `chat.read`, `chat.send`, `net.local` |
 | [`fps-meter`](plugins/fps-meter) | FPS и время кадра страницы оверлея (avg/p95/max, пропущенные кадры, график) — чтобы найти виджет, «просаживающий» оверлей в OBS | — |
 
 ### Автономные плагины (standalone, wasm)
@@ -18,7 +18,7 @@
 | Плагин | Что делает | Разрешения |
 |---|---|---|
 | [`music`](wasm/music) | заявки на треки Яндекс Музыки за баллы канала: очередь, выдача аддону плеера, выполнение/отмена награды; виджет очереди | `storage`, `twitch.redemption` |
-| [`osu-skills`](wasm/osu-skills) | график навыков текущей карты osu! (tosu + расчёт go-osu), виджет | `net.local` |
+| [`osu-tools`](wasm/osu-tools) | график навыков текущей карты osu! (tosu + расчёт go-osu), виджет, и команда чата `!np` (заменяет `osu-skills` и `osu-np`) | `net.local`, `chat.command.read`, `chat.send` |
 
 Установка: скачайте `<id>.wasm` из релиза `<id>-v<версия>`, положите в папку плагинов Overlay Composer (рядом с обычными плагинами; её открывает «Open folder» в «Standalone plugins…»), нажмите «Rescan» и выдайте плагину разрешения в «Plugin store… → Standalone plugins…».
 Устройство плагинов — [`docs/WASM_PLUGINS.md`](https://github.com/compico/overlaycomposer/blob/main/docs/WASM_PLUGINS.md); SDK для Go — [`pkg/ocplugin`](https://github.com/compico/overlaycomposer/tree/main/pkg/ocplugin).

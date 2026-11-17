@@ -15,8 +15,8 @@ import { WASI } from "node:wasi";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const WASM = join(ROOT, "wasm");
 const DIST = join(ROOT, "dist");
-const PERMS = new Set(["storage", "net.http", "net.local", "twitch.redemption", "timer", "events.publish", "chat.send"]);
-const EVENTS = new Set(["twitch.redemption", "timer", "http.response"]);
+const PERMS = new Set(["storage", "net.http", "net.local", "twitch.redemption", "timer", "events.publish", "chat.send", "chat.command.read"]);
+const EVENTS = new Set(["twitch.redemption", "chat.command", "timer", "http.response"]);
 
 export function pluginIds() {
   if (!existsSync(WASM)) return [];
@@ -37,6 +37,11 @@ export function classifyChanges(files) {
     if (!/\.md$/i.test(m[2]) && !/_test\.go$/.test(m[2])) code.add(m[1]);
   }
   return { changed: [...changed].sort(), code: [...code].sort() };
+}
+
+/** Убирает из результата classifyChanges плагины, которых больше нет (удалены или переименованы): собирать и выпускать нечего. */
+export function onlyExisting(r, exists) {
+  return { changed: r.changed.filter(exists), code: r.code.filter(exists) };
 }
 
 /** Читает метаданные из oc_meta: чистая функция, host_call недоступен (возвращает «пусто»). */
@@ -67,6 +72,10 @@ export function checkMeta(id, m) {
   for (const p of m.permissions ?? []) if (!PERMS.has(p)) e.push(`неизвестное разрешение «${p}»`);
   for (const s of m.subscriptions ?? []) if (!EVENTS.has(s)) e.push(`неизвестная подписка «${s}»`);
   if ((m.subscriptions ?? []).includes("twitch.redemption") && !(m.permissions ?? []).includes("twitch.redemption")) e.push("подписка twitch.redemption требует разрешения twitch.redemption");
+  if ((m.subscriptions ?? []).includes("chat.command")) {
+    if (!(m.permissions ?? []).includes("chat.command.read")) e.push("подписка chat.command требует разрешения chat.command.read");
+    if (!(m.commands ?? []).length) e.push("подписка chat.command требует непустого commands");
+  }
   return e;
 }
 
@@ -79,7 +88,7 @@ function run(cmd, args, opts) {
 // ---- статика (виджеты): папка wasm/<id>/ui упаковывается в сам .wasm утилитой ocpack из Overlay Composer ----
 
 /** Ревизия overlaycomposer, из которой берётся ocpack. Менять осознанно: формат секции oc.assets версионируется ревизией. */
-export const OCPACK_REF = "55098dac06a0f6fa9d339728373d3c81bb86e762";
+export const OCPACK_REF = "b15977a627d5b2dbdefa12896863f61f72cd5400";
 const TOOLS = join(ROOT, ".tools", "bin");
 
 /** Файлы папки ui относительно неё (через «/»), без скрытых; null — папки нет. */
@@ -156,7 +165,7 @@ async function main(argv) {
       const base = args[0];
       if (!base) throw new Error("changed <base-ref>");
       const files = execFileSync("git", ["diff", "--name-only", `${base}...HEAD`], { cwd: ROOT, encoding: "utf8" }).split("\n").filter(Boolean);
-      console.log(JSON.stringify(classifyChanges(files)));
+      console.log(JSON.stringify(onlyExisting(classifyChanges(files), (id) => existsSync(join(ROOT, "wasm", id, "go.mod")))));
       return;
     }
     case "build":

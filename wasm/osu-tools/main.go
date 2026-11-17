@@ -1,4 +1,4 @@
-// Плагин «osu-skills» — график сложности навыков текущей карты osu! (stamina, tenacity, agility, precision, reading, memory,
+// Плагин «osu-tools» — инструменты osu!: график сложности навыков текущей карты osu! (stamina, tenacity, agility, precision, reading, memory,
 // accuracy, reaction). Объединяет tosu-оверлей osuskillsgraph и расчёт навыков go-osu: поднимать go-osu не нужно.
 //
 // Состояние (файл карты, моды, время) хост ретранслирует из websocket tosu событием live (net.local streams): из sandbox-iframe
@@ -6,7 +6,9 @@
 // .osu у того же tosu (Fetch хоста, разрешение net.local), считает кривые библиотекой github.com/compico/go-osu/pkg и отдаёт
 // их в формате ручки go-osu /strains.
 //
-// Сборка: GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o osu-skills.wasm .
+// Второй инструмент — команда чата !np (np.go): отвечает ссылкой на текущую карту; чат приходит событием chat.command от OC.
+//
+// Сборка: GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o osu-tools.wasm .
 package main
 
 import (
@@ -16,23 +18,28 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.6.2"
+const version = "1.0.0"
 
 // Config — настройки пользователя.
 type Config struct {
 	TosuHost string `json:"tosuHost"`
+	NPConfig
 }
 
 // svc — сервис плагина; пакетная переменная нужна обработчику ответа Fetch, который создаётся раньше присваивания.
 var svc *Service
 
+// np — команда !np.
+var np *NP
+
 func init() {
 	p := ocplugin.New(ocplugin.Meta{
-		ID: "osu-skills", Name: "osu! skills graph", Version: version, Author: "compico",
-		Description: "График сложности навыков текущей карты osu! (данные и файл карты — из tosu, расчёт — go-osu).",
-		Permissions: []string{ocplugin.PermNetLocal},
+		ID: "osu-tools", Name: "osu! tools", Version: version, Author: "compico",
+		Description: "График сложности навыков текущей карты osu! и команда !np в чате Twitch (данные и файл карты — из tosu, расчёт — go-osu).",
+		Permissions: []string{ocplugin.PermNetLocal, ocplugin.PermChat, ocplugin.PermChatCommandRead},
+		Commands:    []string{"np"},
 		// Хост пускает плагин только на tosu и только в раздел с файлами карт.
-		NetLocal: []ocplugin.NetLocalTarget{{Target: DefaultTosu, Setting: "tosuHost", Paths: []string{MapsPath},
+		NetLocal: []ocplugin.NetLocalTarget{{Target: DefaultTosu, Setting: "tosuHost", Paths: []string{MapsPath, StatePath},
 			// Состояние tosu хост ретранслирует сам: держит websocket к tosu (без Origin) и публикует выбранные поля событием live,
 			// пока на него подписан виджет. wasm при этом не вызывается.
 			Streams: []ocplugin.NetLocalStream{{
@@ -63,6 +70,30 @@ func init() {
 				"type": "string", "title": "Адрес tosu",
 				"description": "host:port, где слушает tosu. По умолчанию " + DefaultTosu + ". ",
 			},
+			"who": map[string]any{
+				"type": "string", "title": "!np: кто может",
+				"description": "everyone (по умолчанию) | sub — подписчики и выше | vip — VIP и выше | mod — модераторы и стример",
+			},
+			"cooldownSeconds": map[string]any{
+				"type": "string", "title": "!np: пауза, секунд",
+				"description": "Общая пауза между ответами, 0..600. По умолчанию 15.",
+			},
+			"replyToUser": map[string]any{
+				"type": "string", "title": "!np: отвечать реплаем",
+				"description": "true (по умолчанию) — ответ на сообщение зрителя; false — обычное сообщение.",
+			},
+			"template": map[string]any{
+				"type": "string", "title": "!np: сообщение",
+				"description": "Подстановки: {artist} {title} {version} {mapper} {stars} {id} {set} {url} {user}. По умолчанию " + defaultTemplate,
+			},
+			"unsubmittedText": map[string]any{
+				"type": "string", "title": "!np: карты нет на osu!",
+				"description": "Ответ для локальной или не загруженной карты. По умолчанию: " + defaultUnsubmitted,
+			},
+			"offlineText": map[string]any{
+				"type": "string", "title": "!np: tosu недоступен",
+				"description": "Ответ, если карту прочитать нельзя. По умолчанию: " + defaultOffline,
+			},
 		},
 	})
 
@@ -72,15 +103,32 @@ func init() {
 		return ocplugin.Fetch(id, ocplugin.FetchRequest{URL: url})
 	}, time.Now)
 
+	np = &NP{Tosu: DefaultTosu, Now: time.Now,
+		Fetch: func(id, url string) error {
+			p.OnHTTPResponse(id, func(r ocplugin.HTTPResponse) { np.OnFetched(r.Status, r.Body, r.Error) })
+			return ocplugin.Fetch(id, ocplugin.FetchRequest{URL: url})
+		},
+		Say: func(replyTo, text string) error {
+			if replyTo != "" {
+				return ocplugin.SayReply(replyTo, text)
+			}
+			return ocplugin.Say(text)
+		}}
+	p.OnChatCommand(func(c ocplugin.ChatCommand) {
+		if c.Command == "np" {
+			np.OnCommand(c)
+		}
+	})
+
 	p.OnInit(func() error {
 		var cfg Config
 		if err := p.Config(&cfg); err != nil {
 			return err
 		}
-		svc.Tosu = DefaultTosu
+		svc.Tosu, np.Tosu, np.Cfg = DefaultTosu, DefaultTosu, cfg.NPConfig
 		if cfg.TosuHost != "" {
 			if ValidTosu(cfg.TosuHost) {
-				svc.Tosu = cfg.TosuHost
+				svc.Tosu, np.Tosu = cfg.TosuHost, cfg.TosuHost
 			} else {
 				ocplugin.Warn(fmt.Sprintf("адрес tosu %q не подходит (нужен host:port на этом компьютере), используется %s", cfg.TosuHost, DefaultTosu))
 			}
