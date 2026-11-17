@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { classifyChanges, checkMeta, checkWidgets, listUI, tagName } from "../scripts/wasm.mjs";
+import { classifyChanges, onlyExisting, checkMeta, checkWidgets, listUI, tagName } from "../scripts/wasm.mjs";
 
 test("classifyChanges: какие плагины затронуты и менялся ли код", () => {
   const r = classifyChanges(["wasm/music/main.go", "wasm/music/README.md", "wasm/other/queue_test.go", "plugins/osu-np/index.html", "README.md", "wasm/.keep"]);
@@ -13,6 +13,12 @@ test("classifyChanges: какие плагины затронуты и меня�
 
 test("classifyChanges: go.mod и go.sum — это код", () => {
   assert.deepEqual(classifyChanges(["wasm/music/go.sum"]).code, ["music"]);
+});
+
+test("onlyExisting: удалённый или переименованный плагин не собирается", () => {
+  const r = classifyChanges(["wasm/osu-skills/main.go", "wasm/osu-tools/main.go", "wasm/osu-tools/README.md"]);
+  assert.deepEqual(r.code, ["osu-skills", "osu-tools"]);
+  assert.deepEqual(onlyExisting(r, (id) => id === "osu-tools"), { changed: ["osu-tools"], code: ["osu-tools"] });
 });
 
 test("tagName", () => assert.equal(tagName("music", "0.1.0"), "music-v0.1.0"));

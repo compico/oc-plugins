@@ -39,6 +39,11 @@ export function classifyChanges(files) {
   return { changed: [...changed].sort(), code: [...code].sort() };
 }
 
+/** Убирает из результата classifyChanges плагины, которых больше нет (удалены или переименованы): собирать и выпускать нечего. */
+export function onlyExisting(r, exists) {
+  return { changed: r.changed.filter(exists), code: r.code.filter(exists) };
+}
+
 /** Читает метаданные из oc_meta: чистая функция, host_call недоступен (возвращает «пусто»). */
 export async function readMeta(file) {
   const bytes = readFileSync(file);
@@ -156,7 +161,7 @@ async function main(argv) {
       const base = args[0];
       if (!base) throw new Error("changed <base-ref>");
       const files = execFileSync("git", ["diff", "--name-only", `${base}...HEAD`], { cwd: ROOT, encoding: "utf8" }).split("\n").filter(Boolean);
-      console.log(JSON.stringify(classifyChanges(files)));
+      console.log(JSON.stringify(onlyExisting(classifyChanges(files), (id) => existsSync(join(ROOT, "wasm", id, "go.mod")))));
       return;
     }
     case "build":
