@@ -29,6 +29,13 @@ test("checkMeta: корректные метаданные", () => assert.deepEq
 
 test("checkMeta: разрешение net.local известно", () => assert.deepEqual(checkMeta("music", { ...good, permissions: [...good.permissions, "net.local", "chat.command.read"] }), []));
 
+test("checkMeta: команды чата", () => {
+  const cmd = { ...good, permissions: ["chat.command.read"], subscriptions: ["chat.command"], commands: ["np"] };
+  assert.deepEqual(checkMeta("music", cmd), []);
+  assert.match(checkMeta("music", { ...cmd, permissions: [] }).join("|"), /требует разрешения chat.command.read/);
+  assert.match(checkMeta("music", { ...cmd, commands: [] }).join("|"), /непустого commands/);
+});
+
 test("checkMeta: ошибки (sad path)", () => {
   const bad = (patch, re) => assert.match(checkMeta("music", { ...good, ...patch }).join("|"), re);
   bad({ id: "other" }, /не совпадает с именем папки/);
