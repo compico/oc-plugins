@@ -108,7 +108,7 @@ async function load() {
   } catch {
     if (mine !== generation) return
     skills = []
-    showStatus('The osu-skills plugin is not responding. Open the widget through Overlay Composer.')
+    showStatus('The osu-tools plugin is not responding. Open the widget through Overlay Composer.')
     return again(5000)
   }
   dirty = true

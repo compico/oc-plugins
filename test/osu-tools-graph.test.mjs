@@ -11,7 +11,7 @@ const {
   smoothSegments,
   smoothValueAt,
   valueNear,
-} = createRequire(import.meta.url)('../wasm/osu-skills/ui/graph.js')
+} = createRequire(import.meta.url)('../wasm/osu-tools/ui/graph.js')
 
 const pts = (...pairs) => pairs.map(([time, value]) => ({ time, value }))
 
@@ -187,7 +187,7 @@ test('smoothValueAt is on the curve: the points\' values at their times, the cur
 
 // ── стили и доминирование ────────────────────────────────────────────────
 
-const { dominance, leaderAt, normalizeStyle, STYLES, DEFAULT_STYLE } = createRequire(import.meta.url)('../wasm/osu-skills/ui/graph.js')
+const { dominance, leaderAt, normalizeStyle, STYLES, DEFAULT_STYLE } = createRequire(import.meta.url)('../wasm/osu-tools/ui/graph.js')
 
 const curve = (key, values, extra = {}) => ({ key, ...extra, points: values.map((value, i) => ({ time: i * 1000, value })) })
 
@@ -244,7 +244,7 @@ test('leaderAt: the leader of the window the time is in', () => {
 
 // ── spectrum ─────────────────────────────────────────────────────────────
 
-const { stepBar } = createRequire(import.meta.url)('../wasm/osu-skills/ui/graph.js')
+const { stepBar } = createRequire(import.meta.url)('../wasm/osu-tools/ui/graph.js')
 
 test('stepBar: rises faster than it falls, settles exactly on the target', () => {
   const up = { level: 0, peak: 0, hold: 0 }
@@ -273,7 +273,7 @@ test('stepBar: the peak holds, then falls, and never drops below the level', () 
 })
 
 test('valueLerp: linear between points, ends are held, empty curve is null', () => {
-  const { valueLerp } = createRequire(import.meta.url)('../wasm/osu-skills/ui/graph.js')
+  const { valueLerp } = createRequire(import.meta.url)('../wasm/osu-tools/ui/graph.js')
   const pts = [{ time: 0, value: 0 }, { time: 1000, value: 100 }, { time: 2000, value: 50 }]
   assert.equal(valueLerp(pts, 500), 50)
   assert.equal(valueLerp(pts, 1500), 75)

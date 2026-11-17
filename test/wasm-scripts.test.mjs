@@ -21,7 +21,7 @@ const good = { id: "music", name: "Music", version: "0.1.0", apiVersion: 1, perm
 
 test("checkMeta: корректные метаданные", () => assert.deepEqual(checkMeta("music", good), []));
 
-test("checkMeta: разрешение net.local известно", () => assert.deepEqual(checkMeta("music", { ...good, permissions: [...good.permissions, "net.local"] }), []));
+test("checkMeta: разрешение net.local известно", () => assert.deepEqual(checkMeta("music", { ...good, permissions: [...good.permissions, "net.local", "chat.command.read"] }), []));
 
 test("checkMeta: ошибки (sad path)", () => {
   const bad = (patch, re) => assert.match(checkMeta("music", { ...good, ...patch }).join("|"), re);
