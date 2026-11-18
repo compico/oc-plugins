@@ -15,7 +15,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.7.1"
+const version = "0.8.0"
 
 // sdkEnv подключает очередь к хосту через SDK.
 type sdkEnv struct{}
@@ -80,6 +80,8 @@ func init() {
 		Description: "Заявки на треки Яндекс Музыки за баллы канала: очередь и выдача плееру. Награда выполняется или отменяется сама.",
 		Permissions: []string{ocplugin.PermStorage, ocplugin.PermRedeem, ocplugin.PermPublish, ocplugin.PermChat},
 		Events:      eventDecls(),
+		// Плитки панели Deck: нажатие ставит команду плееру так же, как виджет «Пульт плеера».
+		Actions: deckActions(),
 		// Интерфейс лежит в ui/ и упаковывается в .wasm при сборке (ocpack).
 		// Страница настроек (окно Plugins → Settings): очередь, пульт и бан-лист для ручного управления в редких случаях.
 		Settings: "settings.html",
@@ -136,7 +138,7 @@ func init() {
 	p.POST("/failed", func(c *ocplugin.Ctx) error { return reply(c, changed(q.Failed(rawBody(c)))) })
 	p.GET("/playing", func(c *ocplugin.Ctx) error { return reply(c, q.Playing()) })
 	// Управление плеером: пульт (виджет) ставит команду, аддон забирает.
-	p.POST("/control", func(c *ocplugin.Ctx) error {
+	p.POST(controlPath, func(c *ocplugin.Ctx) error {
 		raw := rawBody(c)
 		r := ctl.Request(raw, q, pl.Get())
 		if r.Status == http.StatusOK {

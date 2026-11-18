@@ -36,6 +36,18 @@ test("checkMeta: команды чата", () => {
   assert.match(checkMeta("music", { ...cmd, commands: [] }).join("|"), /непустого commands/);
 });
 
+test("checkMeta: действия Deck", () => {
+  const withActions = { ...good, routes: [{ method: "POST", path: "/control", handler: "h" }], actions: [{ id: "toggle", title: "Play", path: "/control", body: { action: "toggle" } }] };
+  assert.deepEqual(checkMeta("music", withActions), []);
+  const bad = (a) => checkMeta("music", { ...withActions, actions: [{ ...withActions.actions[0], ...a }] }).join("|");
+  assert.match(bad({ id: "Bad" }), /id a-z0-9/);
+  assert.match(bad({ title: " " }), /title/);
+  assert.match(bad({ path: "/nope" }), /не объявлен в routes/);
+  assert.match(bad({ method: "GET" }), /не объявлен в routes/);
+  assert.match(bad({ body: "x".repeat(1100) }), /больше 1 КиБ/);
+  assert.match(checkMeta("music", { ...withActions, actions: [withActions.actions[0], withActions.actions[0]] }).join("|"), /уникален/);
+});
+
 test("checkMeta: ошибки (sad path)", () => {
   const bad = (patch, re) => assert.match(checkMeta("music", { ...good, ...patch }).join("|"), re);
   bad({ id: "other" }, /не совпадает с именем папки/);

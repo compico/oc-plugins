@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
 // Управление плеером. Плагин пассивен и до PulseSync не дотягивается, поэтому команда ставится в короткую очередь, а аддон
@@ -108,4 +110,22 @@ func (c *Control) Done(raw json.RawMessage) Response {
 		}
 	}
 	return errResp(http.StatusNotFound, "unknown or expired command")
+}
+
+// controlPath — маршрут управления плеером; им же пользуются виджет «Пульт» и плитки панели Deck.
+const controlPath = "/control"
+
+// deckActions — действия для плиток панели Deck (Meta.Actions). Тело — та же команда, что шлёт пульт: {"action": "..."}.
+// Пропуск с баном необратим для заявок на этот трек, поэтому плитка просит второе касание.
+func deckActions() []ocplugin.Action {
+	act := func(id, title, icon, action string, danger bool) ocplugin.Action {
+		return ocplugin.Action{ID: id, Title: title, Icon: icon, Path: controlPath, Body: json.RawMessage(`{"action":"` + action + `"}`), Danger: danger}
+	}
+	return []ocplugin.Action{
+		act("toggle", "Play / pause", "play", actToggle, false),
+		act("play", "Play", "play", actPlay, false),
+		act("pause", "Pause", "pause", actPause, false),
+		act("skip", "Skip", "next", actSkip, false),
+		act("skip-ban", "Skip and ban", "ban", actSkipBan, true),
+	}
 }
