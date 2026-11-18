@@ -84,6 +84,12 @@ export function checkMeta(id, m) {
     const method = a?.method || "POST";
     if (!(m.routes ?? []).some((r) => r.method === method && r.path === a?.path)) e.push(`${where}: маршрут ${method} ${a?.path} не объявлен в routes`);
     if (a?.body !== undefined && JSON.stringify(a.body).length > 1024) e.push(`${where}: body больше 1 КиБ`);
+    if (a?.activeWhen) {
+      const w = a.activeWhen;
+      if (!(m.events ?? []).some((ev) => ev.id === w.topic)) e.push(`${where}: activeWhen.topic «${w.topic}» не объявлен в events`);
+      if (w.field !== undefined && !/^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){0,3}$/.test(w.field)) e.push(`${where}: activeWhen.field — путь вида a.b (до 4 частей)`);
+      if (w.equals !== undefined && !["string", "number", "boolean"].includes(typeof w.equals)) e.push(`${where}: activeWhen.equals — строка, число или boolean`);
+    }
   }
   if ((m.subscriptions ?? []).includes("chat.command")) {
     if (!(m.permissions ?? []).includes("chat.command.read")) e.push("подписка chat.command требует разрешения chat.command.read");

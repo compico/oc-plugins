@@ -48,3 +48,30 @@ func TestDeckActionsAreValidControlCommands(t *testing.T) {
 		}
 	}
 }
+
+// Подсветка плиток: топик «now» хранит {"now":{"playing":…}}, поэтому условие смотрит в now.playing.
+func TestDeckActionsHighlightByPlayerState(t *testing.T) {
+	want := map[string]string{"toggle": "true", "play": "true", "pause": "false"}
+	for _, a := range deckActions() {
+		w := want[a.ID]
+		if w == "" {
+			if a.ActiveWhen != nil {
+				t.Errorf("%s: подсветки быть не должно", a.ID)
+			}
+			continue
+		}
+		if a.ActiveWhen == nil || a.ActiveWhen.Topic != topicNow || a.ActiveWhen.Field != "now.playing" || string(a.ActiveWhen.Equals) != w {
+			t.Errorf("%s: %+v", a.ID, a.ActiveWhen)
+		}
+	}
+	// условие должно быть выполнимо на реальном кадре, который публикует плагин
+	raw, _ := json.Marshal(map[string]any{"now": &NowPlaying{Playing: true}, "at": 1})
+	var m struct {
+		Now struct {
+			Playing bool `json:"playing"`
+		} `json:"now"`
+	}
+	if err := json.Unmarshal(raw, &m); err != nil || !m.Now.Playing {
+		t.Fatalf("кадр now не содержит now.playing: %s", raw)
+	}
+}

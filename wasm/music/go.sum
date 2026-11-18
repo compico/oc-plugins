@@ -1,8 +1,2 @@
-github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261107013548-46c86384e039 h1:TNoX+K7wtxleadHQV+2qxljwScSm+pJqQNo9DBJzVUo=
-github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261107013548-46c86384e039/go.mod h1:vN3OMuM6MaySeVreHAbDOPmokRzSbam0GCq8UerWCvw=
-github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261108134243-4eb6541b0d2b h1:/BKer6EAVSS7LFraT1jdnD/FmCtg1g9Pq9L+FfpSPqg=
-github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261108134243-4eb6541b0d2b/go.mod h1:vN3OMuM6MaySeVreHAbDOPmokRzSbam0GCq8UerWCvw=
-github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261111082635-eefbbf21c574 h1:M5rRNWnFuKw1n8Bc1gMSB2YBHhfJ6KhfRJ4E5kPQANY=
-github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261111082635-eefbbf21c574/go.mod h1:vN3OMuM6MaySeVreHAbDOPmokRzSbam0GCq8UerWCvw=
-github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261118013317-69755e43bcee h1:UwaheSItjaBWOc+5d+/oBzXRMlH+2W1JorILXp02Bjc=
-github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261118013317-69755e43bcee/go.mod h1:vN3OMuM6MaySeVreHAbDOPmokRzSbam0GCq8UerWCvw=
+github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261118095037-e13c214e5e36 h1:zTo2993ZLy8cOAqCRaH7uNGO0ElsJe2ulj1jZt7yHkg=
+github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261118095037-e13c214e5e36/go.mod h1:vN3OMuM6MaySeVreHAbDOPmokRzSbam0GCq8UerWCvw=

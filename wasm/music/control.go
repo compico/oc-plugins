@@ -121,10 +121,15 @@ func deckActions() []ocplugin.Action {
 	act := func(id, title, icon, action string, danger bool) ocplugin.Action {
 		return ocplugin.Action{ID: id, Title: title, Icon: icon, Path: controlPath, Body: json.RawMessage(`{"action":"` + action + `"}`), Danger: danger}
 	}
+	// Подсветка по состоянию плеера: топик «now» хранит {"now":{"playing":…}}.
+	playing := func(a ocplugin.Action, v string) ocplugin.Action {
+		a.ActiveWhen = &ocplugin.ActiveWhen{Topic: topicNow, Field: "now.playing", Equals: json.RawMessage(v)}
+		return a
+	}
 	return []ocplugin.Action{
-		act("toggle", "Play / pause", "play", actToggle, false),
-		act("play", "Play", "play", actPlay, false),
-		act("pause", "Pause", "pause", actPause, false),
+		playing(act("toggle", "Play / pause", "play", actToggle, false), "true"),
+		playing(act("play", "Play", "play", actPlay, false), "true"),
+		playing(act("pause", "Pause", "pause", actPause, false), "false"),
 		act("skip", "Skip", "next", actSkip, false),
 		act("skip-ban", "Skip and ban", "ban", actSkipBan, true),
 	}
