@@ -52,6 +52,12 @@ test("checkMeta: действия Deck", () => {
   assert.match(aw({ topic: "other" }), /activeWhen\.topic/);
   assert.match(aw({ topic: "now", field: "a b" }), /activeWhen\.field/);
   assert.match(aw({ topic: "now", equals: { a: 1 } }), /activeWhen\.equals/);
+  const dp = (d) => checkMeta("music", { ...withEvents, actions: [{ ...withActions.actions[0], display: d }] }).join("|");
+  assert.equal(dp({ topic: "now", fields: ["now.title", "now.artists"] }), "");
+  assert.match(dp({ topic: "other", fields: ["a"] }), /display\.topic/);
+  assert.match(dp({ topic: "now", fields: [] }), /display\.fields/);
+  assert.match(dp({ topic: "now", fields: ["a", "b", "c", "d", "e"] }), /display\.fields/);
+  assert.match(dp({ topic: "now", fields: ["a b"] }), /display\.fields/);
 });
 
 test("checkMeta: ошибки (sad path)", () => {
