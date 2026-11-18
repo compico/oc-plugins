@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
 // Действия Deck — это команды пульта: каждое тело должно проходить ту же проверку, что и запрос виджета.
 func TestDeckActionsAreValidControlCommands(t *testing.T) {
 	acts := deckActions()
-	if len(acts) != 5 {
+	if len(acts) != 6 {
 		t.Fatalf("действий %d", len(acts))
 	}
 	seen, bodies := map[string]bool{}, map[string]bool{}
@@ -51,7 +53,7 @@ func TestDeckActionsAreValidControlCommands(t *testing.T) {
 
 // Подсветка плиток: топик «now» хранит {"now":{"playing":…}}, поэтому условие смотрит в now.playing.
 func TestDeckActionsHighlightByPlayerState(t *testing.T) {
-	want := map[string]string{"toggle": "true", "play": "true", "pause": "false"}
+	want := map[string]string{"now": "true", "toggle": "true", "play": "true", "pause": "false"}
 	for _, a := range deckActions() {
 		w := want[a.ID]
 		if w == "" {
@@ -73,5 +75,35 @@ func TestDeckActionsHighlightByPlayerState(t *testing.T) {
 	}
 	if err := json.Unmarshal(raw, &m); err != nil || !m.Now.Playing {
 		t.Fatalf("кадр now не содержит now.playing: %s", raw)
+	}
+}
+
+// Плитка «Сейчас играет» берёт текст из тех же полей, что публикует плагин в топик now.
+func TestNowTileDisplaysTitleAndArtists(t *testing.T) {
+	var now *ocplugin.Action
+	for _, a := range deckActions() {
+		if a.Display != nil {
+			if now != nil {
+				t.Fatal("текст должен быть только у плитки «Сейчас играет»")
+			}
+			a := a
+			now = &a
+		}
+	}
+	if now == nil || now.ID != "now" || now.Display.Topic != topicNow {
+		t.Fatalf("%+v", now)
+	}
+	raw, _ := json.Marshal(map[string]any{"now": &NowPlaying{Title: "Song", Artists: []string{"A", "B"}}, "at": 1})
+	var ev struct {
+		Now struct {
+			Title   string   `json:"title"`
+			Artists []string `json:"artists"`
+		} `json:"now"`
+	}
+	if err := json.Unmarshal(raw, &ev); err != nil || ev.Now.Title != "Song" || len(ev.Now.Artists) != 2 {
+		t.Fatalf("кадр now не содержит now.title/now.artists: %s", raw)
+	}
+	if got := now.Display.Fields; len(got) != 2 || got[0] != "now.title" || got[1] != "now.artists" {
+		t.Fatalf("поля %v", got)
 	}
 }

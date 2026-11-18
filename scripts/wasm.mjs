@@ -91,6 +91,14 @@ export function checkMeta(id, m) {
       if (w.equals !== undefined && !["string", "number", "boolean"].includes(typeof w.equals)) e.push(`${where}: activeWhen.equals — строка, число или boolean`);
     }
   }
+  for (const a of actions) {
+    const d = a?.display;
+    if (!d) continue;
+    const where = `action «${a.id}»`;
+    if (!(m.events ?? []).some((ev) => ev.id === d.topic)) e.push(`${where}: display.topic «${d.topic}» не объявлен в events`);
+    if (!Array.isArray(d.fields) || d.fields.length < 1 || d.fields.length > 4) e.push(`${where}: display.fields — от 1 до 4 путей`);
+    else for (const f of d.fields) if (!/^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){0,3}$/.test(f)) e.push(`${where}: display.fields — пути вида a.b (до 4 частей)`);
+  }
   if ((m.subscriptions ?? []).includes("chat.command")) {
     if (!(m.permissions ?? []).includes("chat.command.read")) e.push("подписка chat.command требует разрешения chat.command.read");
     if (!(m.commands ?? []).length) e.push("подписка chat.command требует непустого commands");

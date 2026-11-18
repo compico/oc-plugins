@@ -126,7 +126,11 @@ func deckActions() []ocplugin.Action {
 		a.ActiveWhen = &ocplugin.ActiveWhen{Topic: topicNow, Field: "now.playing", Equals: json.RawMessage(v)}
 		return a
 	}
+	// «Сейчас играет» для крупной плитки: название и исполнители из топика now; нажатие переключает паузу.
+	nowTile := playing(act("now", "Now playing", "play", actToggle, false), "true")
+	nowTile.Display = &ocplugin.Display{Topic: topicNow, Fields: []string{"now.title", "now.artists"}}
 	return []ocplugin.Action{
+		nowTile,
 		playing(act("toggle", "Play / pause", "play", actToggle, false), "true"),
 		playing(act("play", "Play", "play", actPlay, false), "true"),
 		playing(act("pause", "Pause", "pause", actPause, false), "false"),
