@@ -46,6 +46,12 @@ test("checkMeta: действия Deck", () => {
   assert.match(bad({ method: "GET" }), /не объявлен в routes/);
   assert.match(bad({ body: "x".repeat(1100) }), /больше 1 КиБ/);
   assert.match(checkMeta("music", { ...withActions, actions: [withActions.actions[0], withActions.actions[0]] }).join("|"), /уникален/);
+  const withEvents = { ...withActions, events: [{ id: "now" }] };
+  const aw = (w) => checkMeta("music", { ...withEvents, actions: [{ ...withActions.actions[0], activeWhen: w }] }).join("|");
+  assert.equal(aw({ topic: "now", field: "now.playing", equals: true }), "");
+  assert.match(aw({ topic: "other" }), /activeWhen\.topic/);
+  assert.match(aw({ topic: "now", field: "a b" }), /activeWhen\.field/);
+  assert.match(aw({ topic: "now", equals: { a: 1 } }), /activeWhen\.equals/);
 });
 
 test("checkMeta: ошибки (sad path)", () => {
