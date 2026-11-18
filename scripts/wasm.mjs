@@ -72,6 +72,19 @@ export function checkMeta(id, m) {
   for (const p of m.permissions ?? []) if (!PERMS.has(p)) e.push(`неизвестное разрешение «${p}»`);
   for (const s of m.subscriptions ?? []) if (!EVENTS.has(s)) e.push(`неизвестная подписка «${s}»`);
   if ((m.subscriptions ?? []).includes("twitch.redemption") && !(m.permissions ?? []).includes("twitch.redemption")) e.push("подписка twitch.redemption требует разрешения twitch.redemption");
+  // Действия для панели Deck: правила те же, что у OC (internal/wasmplugins/meta.go): иначе плагин не запустится.
+  const actions = m.actions ?? [];
+  if (actions.length > 32) e.push("actions: не больше 32");
+  const actionIds = new Set();
+  for (const a of actions) {
+    const where = `action «${a?.id}»`;
+    if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(a?.id ?? "") || actionIds.has(a.id)) e.push(`${where}: id a-z0-9_- до 32 символов, уникален`);
+    actionIds.add(a?.id);
+    if (typeof a?.title !== "string" || !a.title.trim() || [...a.title].length > 40 || /[\r\n\t]/.test(a.title)) e.push(`${where}: нужен title до 40 символов в одну строку`);
+    const method = a?.method || "POST";
+    if (!(m.routes ?? []).some((r) => r.method === method && r.path === a?.path)) e.push(`${where}: маршрут ${method} ${a?.path} не объявлен в routes`);
+    if (a?.body !== undefined && JSON.stringify(a.body).length > 1024) e.push(`${where}: body больше 1 КиБ`);
+  }
   if ((m.subscriptions ?? []).includes("chat.command")) {
     if (!(m.permissions ?? []).includes("chat.command.read")) e.push("подписка chat.command требует разрешения chat.command.read");
     if (!(m.commands ?? []).length) e.push("подписка chat.command требует непустого commands");
