@@ -28,7 +28,7 @@ export function pluginIds() {
 /** Тег релиза плагина: music-v0.1.0. */
 export const tagName = (id, version) => `${id}-v${version}`;
 
-/** По списку изменённых файлов: какие плагины затронуты и менялся ли их код (не README и не тесты). */
+/** По списку изменённых файлов: какие плагины затронуты и менялся ли их код (не README, не changelog.json и не тесты). */
 export function classifyChanges(files) {
   const changed = new Set();
   const code = new Set();
@@ -36,7 +36,7 @@ export function classifyChanges(files) {
     const m = /^wasm\/([^/]+)\/(.+)$/.exec(f);
     if (!m) continue;
     changed.add(m[1]);
-    if (!/\.md$/i.test(m[2]) && !/_test\.go$/.test(m[2])) code.add(m[1]);
+    if (!/\.md$/i.test(m[2]) && m[2] !== "changelog.json" && !/_test\.go$/.test(m[2])) code.add(m[1]);
   }
   return { changed: [...changed].sort(), code: [...code].sort() };
 }
