@@ -96,3 +96,16 @@ test("checkWidgets: согласованность виджетов и папк�
   assert.match(checkWidgets({}, new Set(["index.html"])).join("|"), /виджеты в oc_meta не объявлены/);
   assert.match(checkWidgets(w, new Set(["other.html"])).join("|"), /ui\/index\.html нет/);
 });
+
+test("infoFromPublished: метаданные опубликованного релиза и проверки совпадения", async () => {
+  const { infoFromPublished } = await import("../scripts/wasm.mjs");
+  const { createHash } = await import("node:crypto");
+  const bytes = Buffer.from("wasm-bytes");
+  const sha = createHash("sha256").update(bytes).digest("hex");
+  const meta = { id: "music", version: "0.8.1", name: "Music" };
+  const info = infoFromPublished({ id: "music", version: "0.8.1", bytes, meta, publishedSha: sha });
+  assert.deepEqual(info, { id: "music", version: "0.8.1", sha256: sha, size: bytes.length, meta });
+  assert.throws(() => infoFromPublished({ id: "music", version: "0.8.1", bytes, meta, publishedSha: "0".repeat(64) }), /не совпадает с опубликованным/);
+  assert.throws(() => infoFromPublished({ id: "music", version: "0.9.0", bytes, meta, publishedSha: sha }), /версия «0\.8\.1»/);
+  assert.throws(() => infoFromPublished({ id: "other", version: "0.8.1", bytes, meta, publishedSha: sha }), /id «music»/);
+});
