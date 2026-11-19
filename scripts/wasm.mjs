@@ -61,6 +61,18 @@ export async function readMeta(file) {
   return JSON.parse(dec.decode(raw));
 }
 
+/**
+ * <id>.json для опубликованного файла: то же, что пишет build, но метаданные берутся из самого .wasm, а не из пересборки.
+ * Сходиться должно всё: sha256 файла с опубликованным, id и версия в oc_meta с тегом релиза.
+ */
+export function infoFromPublished({ id, version, bytes, meta, publishedSha }) {
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  if (publishedSha && sha256 !== publishedSha) throw new Error(`${id} ${version}: sha256 файла ${sha256} не совпадает с опубликованным ${publishedSha}`);
+  if (meta.id !== id) throw new Error(`${id} ${version}: в oc_meta id «${meta.id}»`);
+  if (meta.version !== version) throw new Error(`${id} ${version}: в oc_meta версия «${meta.version}»`);
+  return { id, version, sha256, size: bytes.length, meta };
+}
+
 /** Лёгкая проверка метаданных (полную делает OC при загрузке): чтобы ошибка находилась до релиза. */
 export function checkMeta(id, m) {
   const e = [];
@@ -208,11 +220,20 @@ async function main(argv) {
       console.log(`${id}: версия ${info.version} ещё не выпускалась — ок`);
       return;
     }
+    case "describe": {
+      // describe <id> <version> <file.wasm> <file.wasm.sha256> — JSON метаданных опубликованного релиза (в stdout)
+      const [id, version, file, shaFile] = args;
+      if (!id || !version || !file || !shaFile) throw new Error("describe <id> <version> <file.wasm> <file.wasm.sha256>");
+      const publishedSha = readFileSync(shaFile, "utf8").trim().split(/\s+/)[0];
+      const info = infoFromPublished({ id, version, bytes: readFileSync(file), meta: await readMeta(file), publishedSha });
+      console.log(JSON.stringify(info, null, 2));
+      return;
+    }
     case "meta":
       console.log(JSON.stringify(await readMeta(args[0]), null, 2));
       return;
     default:
-      throw new Error("команды: ids | changed <base> | build <id>... | check-bump <id> | meta <file.wasm>");
+      throw new Error("команды: ids | changed <base> | build <id>... | check-bump <id> | meta <file.wasm> | describe <id> <version> <file> <sha-file>");
   }
 }
 

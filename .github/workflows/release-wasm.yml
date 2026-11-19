@@ -53,18 +53,7 @@ jobs:
             version=$(jq -r .version "dist/$id.json")
             tag="$id-v$version"
             if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-              echo "$tag уже выпущен"
-              # Метаданные <id>.json появились позже первых релизов: докладываем их, если опубликован тот же файл (сборка воспроизводима).
-              assets=$(gh release view "$tag" --json assets --jq '[.assets[].name] | join(" ")' 2>/dev/null || true)
-              if [ -n "$assets" ] && [[ " $assets " != *" $id.json "* ]]; then
-                published=$(gh release download "$tag" -p "$id.wasm.sha256" -O - | cut -d' ' -f1)
-                if [ "$published" = "$(jq -r .sha256 "dist/$id.json")" ]; then
-                  gh release upload "$tag" "dist/$id.json"
-                  echo "$tag: добавлен $id.json"
-                else
-                  echo "::warning::$tag: пересборка дала другой sha256, $id.json не добавлен"
-                fi
-              fi
+              echo "$tag уже выпущен — пропускаю"
               continue
             fi
             sha=$(jq -r .sha256 "dist/$id.json")
@@ -78,3 +67,9 @@ jobs:
             } > "dist/$id.notes.md"
             gh release create "$tag" "dist/$id.wasm" "dist/$id.wasm.sha256" "dist/$id.json" --title "$title $version" --notes-file "dist/$id.notes.md" --target "$GITHUB_SHA"
           done
+      - name: Метаданные у вышедших релизов
+        # <id>.json появился позже первых релизов. Берём опубликованный .wasm (не пересборку: бинарник зависит от патча тулчейна),
+        # сверяем с опубликованным .sha256 и докладываем файл ко всем релизам, где его нет.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/backfill-info.sh
