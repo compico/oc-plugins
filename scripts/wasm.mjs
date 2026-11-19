@@ -1,16 +1,18 @@
 // Сборка и проверка wasm-плагинов (wasm/<id>/): node scripts/wasm.mjs <команда>
 //   ids                    — id всех плагинов (папки wasm/* с go.mod)
 //   changed <base-ref>     — id изменённых относительно base плагинов (для PR); «code» — менялся ли код, а не только README/тесты
-//   build <id>...          — go vet + go test + сборка → dist/<id>.wasm, dist/<id>.json (метаданные из самого wasm, sha256, размер)
+//   build <id>...          — go vet + go test + сборка → dist/<id>.wasm, dist/<id>.json (метаданные из самого wasm, sha256, размер), dist/<id>.changelog.json (из wasm/<id>/changelog.json, обязателен)
+//   changelog <id> <ver>   — wasm/<id>/changelog.json без записей новее <ver> (для релиза старой версии)
 //   check-bump <id>        — после build: если версия из wasm уже выпущена (есть тег), а код менялся — ошибка «поднимите version»
 //   meta <file.wasm>       — вывести метаданные, прочитанные из oc_meta
 // Зависимостей нет: метаданные читает Node (node:wasi), как их читает OC (oc_meta на одноразовом экземпляре).
-import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, statSync, copyFileSync } from "node:fs";
 import { join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { WASI } from "node:wasi";
+import { checkChangelog, upTo } from "./changelog.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const WASM = join(ROOT, "wasm");
@@ -185,7 +187,10 @@ export async function build(id) {
   if (ui) run(ocpackPath(), ["pack", out, join(dir, "ui")]); // до метаданных и sha256: хеш считается от готового файла
   const meta = await readMeta(out);
   const errs = [...checkMeta(id, meta), ...checkWidgets(meta, ui)];
+  const log = join(dir, "changelog.json");
+  errs.push(...checkChangelog(log, meta.version, { required: true }));
   if (errs.length) throw new Error(`${id}: ${errs.join("; ")}`);
+  copyFileSync(log, join(DIST, `${id}.changelog.json`));
   const data = readFileSync(out);
   const info = { id, version: meta.version, sha256: createHash("sha256").update(data).digest("hex"), size: data.length, meta };
   writeFileSync(join(DIST, `${id}.json`), JSON.stringify(info, null, 2) + "\n");
@@ -227,6 +232,13 @@ async function main(argv) {
       const publishedSha = readFileSync(shaFile, "utf8").trim().split(/\s+/)[0];
       const info = infoFromPublished({ id, version, bytes: readFileSync(file), meta: await readMeta(file), publishedSha });
       console.log(JSON.stringify(info, null, 2));
+      return;
+    }
+    case "changelog": {
+      // changelog <id> <version> — changelog.json плагина без записей новее version (для релиза старой версии), в stdout
+      const [id, version] = args;
+      if (!id || !version) throw new Error("changelog <id> <version>");
+      console.log(JSON.stringify(upTo(join(WASM, id, "changelog.json"), version), null, 2));
       return;
     }
     case "meta":

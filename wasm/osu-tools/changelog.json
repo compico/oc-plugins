@@ -1,0 +1,7 @@
+[
+  {
+    "version": "1.0.0",
+    "changes": ["osu-skills и osu-np объединены в один wasm-плагин.", "Команда !np в чате."],
+    "migration": "Удалите старые плагины osu-skills и osu-np. В osu! tools выдайте разрешения net.local, chat.command.read и chat.send и заново добавьте виджет графика."
+  }
+]
