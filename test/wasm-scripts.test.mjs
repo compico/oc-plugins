@@ -109,3 +109,9 @@ test("infoFromPublished: метаданные опубликованного р�
   assert.throws(() => infoFromPublished({ id: "music", version: "0.9.0", bytes, meta, publishedSha: sha }), /версия «0\.8\.1»/);
   assert.throws(() => infoFromPublished({ id: "other", version: "0.8.1", bytes, meta, publishedSha: sha }), /id «music»/);
 });
+
+test("classifyChanges: changelog.json не считается изменением кода", () => {
+  const r = classifyChanges(["wasm/music/changelog.json", "wasm/osu-tools/changelog.json", "wasm/osu-tools/main.go"]);
+  assert.deepEqual(r.changed, ["music", "osu-tools"]);
+  assert.deepEqual(r.code, ["osu-tools"]);
+});

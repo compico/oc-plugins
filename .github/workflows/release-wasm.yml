@@ -65,7 +65,7 @@ jobs:
               printf '**Установка:** скачайте `%s.wasm` и положите в папку плагинов Overlay Composer (рядом с обычными плагинами; кнопка «Open folder» в окне «Standalone plugins…» её открывает), затем нажмите «Rescan» там же или перезапустите OC. Плагин запросит разрешения: %s.\n\n' "$id" "$perms"
               printf 'sha256: `%s`\n' "$sha"
             } > "dist/$id.notes.md"
-            gh release create "$tag" "dist/$id.wasm" "dist/$id.wasm.sha256" "dist/$id.json" --title "$title $version" --notes-file "dist/$id.notes.md" --target "$GITHUB_SHA"
+            gh release create "$tag" "dist/$id.wasm" "dist/$id.wasm.sha256" "dist/$id.json" "dist/$id.changelog.json" --title "$title $version" --notes-file "dist/$id.notes.md" --target "$GITHUB_SHA"
           done
       - name: Метаданные у вышедших релизов
         # <id>.json появился позже первых релизов. Берём опубликованный .wasm (не пересборку: бинарник зависит от патча тулчейна),
@@ -73,3 +73,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/backfill-info.sh
+      - name: Changelog у вышедших релизов
+        # <id>.changelog.json появился позже первых релизов: докладываем его ко всем релизам, где нет, — записи не новее версии релиза.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/backfill-changelog.sh
