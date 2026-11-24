@@ -17,8 +17,8 @@ import { checkChangelog, upTo } from "./changelog.mjs";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const WASM = join(ROOT, "wasm");
 const DIST = join(ROOT, "dist");
-const PERMS = new Set(["storage", "net.http", "net.local", "twitch.redemption", "timer", "events.publish", "chat.send", "chat.command.read"]);
-const EVENTS = new Set(["twitch.redemption", "chat.command", "timer", "http.response"]);
+const PERMS = new Set(["storage", "net.http", "net.local", "twitch.redemption", "timer", "events.publish", "chat.send", "chat.command.read", "chat.read"]);
+const EVENTS = new Set(["twitch.redemption", "chat.command", "chat.message", "timer", "http.response"]);
 
 export function pluginIds() {
   if (!existsSync(WASM)) return [];
@@ -117,6 +117,9 @@ export function checkMeta(id, m) {
     if (!(m.permissions ?? []).includes("chat.command.read")) e.push("подписка chat.command требует разрешения chat.command.read");
     if (!(m.commands ?? []).length) e.push("подписка chat.command требует непустого commands");
   }
+  if ((m.subscriptions ?? []).includes("chat.message") && !(m.permissions ?? []).includes("chat.read")) {
+    e.push("подписка chat.message требует разрешения chat.read");
+  }
   return e;
 }
 
@@ -128,8 +131,8 @@ function run(cmd, args, opts) {
 
 // ---- статика (виджеты): папка wasm/<id>/ui упаковывается в сам .wasm утилитой ocpack из Overlay Composer ----
 
-/** Ревизия overlaycomposer, из которой берётся ocpack. Менять осознанно: формат секции oc.assets версионируется ревизией. ocpack проверяет метаданные плагина, поэтому ревизия не старше права, которое плагин просит (chat.read — с #239). */
-export const OCPACK_REF = "6dbff88fe40f78eb1078ee58ec3fdd1d556ef825";
+/** Ревизия overlaycomposer, из которой берётся ocpack. Менять осознанно: формат секции oc.assets версионируется ревизией. */
+export const OCPACK_REF = "b15977a627d5b2dbdefa12896863f61f72cd5400";
 const TOOLS = join(ROOT, ".tools", "bin");
 
 /** Файлы папки ui относительно неё (через «/»), без скрытых; null — папки нет. */

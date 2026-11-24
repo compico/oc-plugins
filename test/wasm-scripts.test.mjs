@@ -36,6 +36,14 @@ test("checkMeta: команды чата", () => {
   assert.match(checkMeta("music", { ...cmd, commands: [] }).join("|"), /непустого commands/);
 });
 
+test("checkMeta: весь чат", () => {
+  const all = { ...good, permissions: ["chat.read"], subscriptions: ["chat.message"] };
+  assert.deepEqual(checkMeta("music", all), []);
+  assert.match(checkMeta("music", { ...all, permissions: [] }).join("|"), /требует разрешения chat.read/);
+  // chat.read и chat.command.read — независимые права
+  assert.match(checkMeta("music", { ...all, permissions: ["chat.command.read"] }).join("|"), /требует разрешения chat.read/);
+});
+
 test("checkMeta: действия Deck", () => {
   const withActions = { ...good, routes: [{ method: "POST", path: "/control", handler: "h" }], actions: [{ id: "toggle", title: "Play", path: "/control", body: { action: "toggle" } }] };
   assert.deepEqual(checkMeta("music", withActions), []);
