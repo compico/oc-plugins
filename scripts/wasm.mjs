@@ -17,8 +17,8 @@ import { checkChangelog, upTo } from "./changelog.mjs";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const WASM = join(ROOT, "wasm");
 const DIST = join(ROOT, "dist");
-const PERMS = new Set(["storage", "net.http", "net.local", "twitch.redemption", "timer", "events.publish", "chat.send", "chat.command.read"]);
-const EVENTS = new Set(["twitch.redemption", "chat.command", "timer", "http.response"]);
+const PERMS = new Set(["storage", "net.http", "net.local", "twitch.redemption", "timer", "events.publish", "chat.send", "chat.command.read", "chat.read"]);
+const EVENTS = new Set(["twitch.redemption", "chat.command", "chat.message", "timer", "http.response"]);
 
 export function pluginIds() {
   if (!existsSync(WASM)) return [];
@@ -116,6 +116,9 @@ export function checkMeta(id, m) {
   if ((m.subscriptions ?? []).includes("chat.command")) {
     if (!(m.permissions ?? []).includes("chat.command.read")) e.push("подписка chat.command требует разрешения chat.command.read");
     if (!(m.commands ?? []).length) e.push("подписка chat.command требует непустого commands");
+  }
+  if ((m.subscriptions ?? []).includes("chat.message") && !(m.permissions ?? []).includes("chat.read")) {
+    e.push("подписка chat.message требует разрешения chat.read");
   }
   return e;
 }

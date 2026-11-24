@@ -20,6 +20,7 @@
 |---|---|---|
 | [`music`](wasm/music) | заявки на треки Яндекс Музыки за баллы канала: очередь, выдача аддону плеера, выполнение/отмена награды; виджет очереди | `storage`, `twitch.redemption` |
 | [`osu-tools`](wasm/osu-tools) | график навыков текущей карты osu! (tosu + расчёт go-osu), виджет, и команда чата `!np` (заменяет `osu-skills` и `osu-np`) | `net.local`, `chat.command.read`, `chat.send` |
+| [`chat`](wasm/chat) | чат Twitch: история хранится на сервере, смайлы приходят готовыми картинками; виджет для OBS (заменяет встроенный `twitch-chat`) | `chat.read` |
 
 Установка: скачайте `<id>.wasm` из релиза `<id>-v<версия>`, положите в папку плагинов Overlay Composer (рядом с обычными плагинами; её открывает «Open folder» в «Standalone plugins…»), нажмите «Rescan» и выдайте плагину разрешения в «Plugin store… → Standalone plugins…».
 Устройство плагинов — [`docs/WASM_PLUGINS.md`](https://github.com/compico/overlaycomposer/blob/main/docs/WASM_PLUGINS.md); SDK для Go — [`pkg/ocplugin`](https://github.com/compico/overlaycomposer/tree/main/pkg/ocplugin).
