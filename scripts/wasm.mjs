@@ -128,8 +128,8 @@ function run(cmd, args, opts) {
 
 // ---- статика (виджеты): папка wasm/<id>/ui упаковывается в сам .wasm утилитой ocpack из Overlay Composer ----
 
-/** Ревизия overlaycomposer, из которой берётся ocpack. Менять осознанно: формат секции oc.assets версионируется ревизией. */
-export const OCPACK_REF = "b15977a627d5b2dbdefa12896863f61f72cd5400";
+/** Ревизия overlaycomposer, из которой берётся ocpack. Менять осознанно: формат секции oc.assets версионируется ревизией. ocpack проверяет метаданные плагина, поэтому ревизия не старше права, которое плагин просит (chat.read — с #239). */
+export const OCPACK_REF = "6dbff88fe40f78eb1078ee58ec3fdd1d556ef825";
 const TOOLS = join(ROOT, ".tools", "bin");
 
 /** Файлы папки ui относительно неё (через «/»), без скрытых; null — папки нет. */
