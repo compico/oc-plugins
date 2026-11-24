@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Twitch chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  #chat { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .msg { flex: none; word-wrap: break-word; overflow-wrap: anywhere; transition: opacity .6s; }
+  .msg.fade { opacity: 0; }
+  .msg .emote { height: 1.4em; vertical-align: middle; margin: 0 .05em; }
+  .msg.action .text { font-style: italic; }
+  #hint[hidden] { display: none; }
+  #hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+          color: #fff; font: 16px system-ui, sans-serif; background: rgba(0,0,0,.45); padding: 12px; box-sizing: border-box; }
+</style>
+</head>
+<body>
+<div id="chat"></div>
+<div id="hint" hidden></div>
+<script src="/plugin-sdk/oc.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
