@@ -15,7 +15,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.9.0"
+const version = "0.9.1"
 
 // sdkEnv подключает очередь к хосту через SDK.
 type sdkEnv struct{}
@@ -76,7 +76,7 @@ func reply(c *ocplugin.Ctx, r Response) error {
 
 func init() {
 	p := ocplugin.New(ocplugin.Meta{
-		ID: "music", Name: "Заявки на треки", Version: version, Author: "compico",
+		ID: "music", Name: "Заявки на треки", Version: version, Author: "compico", MinHost: "v2026.11.14.4",
 		Description: "Заявки на треки Яндекс Музыки за баллы канала: очередь и выдача плееру. Награда выполняется или отменяется сама.",
 		Permissions: []string{ocplugin.PermStorage, ocplugin.PermRedeem, ocplugin.PermPublish, ocplugin.PermChat},
 		Events:      eventDecls(),

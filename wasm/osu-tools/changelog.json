@@ -3,5 +3,6 @@
     "version": "1.0.0",
     "changes": ["osu-skills и osu-np объединены в один wasm-плагин.", "Команда !np в чате."],
     "migration": "Удалите старые плагины osu-skills и osu-np. В osu! tools выдайте разрешения net.local, chat.command.read и chat.send и заново добавьте виджет графика."
-  }
+  },
+  { "version": "1.0.1", "changes": ["Плагин объявляет минимальную версию Overlay Composer (v2026.11.23.6, с правом chat.command.read): на более старом приложении магазин не предложит его установить."] }
 ]

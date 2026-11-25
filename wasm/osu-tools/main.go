@@ -18,7 +18,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "1.0.0"
+const version = "1.0.1"
 
 // Config — настройки пользователя.
 type Config struct {
@@ -34,7 +34,7 @@ var np *NP
 
 func init() {
 	p := ocplugin.New(ocplugin.Meta{
-		ID: "osu-tools", Name: "osu! tools", Version: version, Author: "compico",
+		ID: "osu-tools", Name: "osu! tools", Version: version, Author: "compico", MinHost: "v2026.11.23.6",
 		Description: "График сложности навыков текущей карты osu! и команда !np в чате Twitch (данные и файл карты — из tosu, расчёт — go-osu).",
 		Permissions: []string{ocplugin.PermNetLocal, ocplugin.PermChat, ocplugin.PermChatCommandRead},
 		Commands:    []string{"np"},
