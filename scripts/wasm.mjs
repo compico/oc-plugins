@@ -83,6 +83,8 @@ export function checkMeta(id, m) {
   if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/.test(m.version ?? "")) e.push(`version «${m.version}»: нужен semver`);
   if (m.apiVersion !== 1) e.push(`apiVersion ${m.apiVersion}: хост понимает 1`);
   if (!String(m.name ?? "").trim()) e.push("name обязателен");
+  // Минимальная версия OC — тег релиза; формат тот же, что проверяет хост (internal/wasmplugins/meta.go).
+  if (m.minHost !== undefined && !/^v\d{4}\.\d{2}\.\d{2}\.\d+$/.test(m.minHost)) e.push(`minHost «${m.minHost}»: нужна версия релиза OC вида v2026.11.25.7`);
   for (const p of m.permissions ?? []) if (!PERMS.has(p)) e.push(`неизвестное разрешение «${p}»`);
   for (const s of m.subscriptions ?? []) if (!EVENTS.has(s)) e.push(`неизвестная подписка «${s}»`);
   if ((m.subscriptions ?? []).includes("twitch.redemption") && !(m.permissions ?? []).includes("twitch.redemption")) e.push("подписка twitch.redemption требует разрешения twitch.redemption");

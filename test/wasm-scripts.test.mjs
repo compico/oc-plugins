@@ -29,6 +29,11 @@ test("checkMeta: корректные метаданные", () => assert.deepEq
 
 test("checkMeta: разрешение net.local известно", () => assert.deepEqual(checkMeta("music", { ...good, permissions: [...good.permissions, "net.local", "chat.command.read"] }), []));
 
+test("checkMeta: minHost — версия релиза OC", () => {
+  assert.deepEqual(checkMeta("music", { ...good, minHost: "v2026.11.25.7" }), []);
+  for (const bad of ["2026.11.25.7", "v2026.11", "latest", ""]) assert.match(checkMeta("music", { ...good, minHost: bad }).join("|"), /minHost/);
+});
+
 test("checkMeta: команды чата", () => {
   const cmd = { ...good, permissions: ["chat.command.read"], subscriptions: ["chat.command"], commands: ["np"] };
   assert.deepEqual(checkMeta("music", cmd), []);
@@ -110,7 +115,7 @@ test("infoFromPublished: метаданные опубликованного р�
   const { createHash } = await import("node:crypto");
   const bytes = Buffer.from("wasm-bytes");
   const sha = createHash("sha256").update(bytes).digest("hex");
-  const meta = { id: "music", version: "0.8.1", name: "Music" };
+  const meta = { id: "music", version: "0.8.1", name: "Music", minHost: "v2026.11.25.7" }; // minHost доезжает до <id>.json
   const info = infoFromPublished({ id: "music", version: "0.8.1", bytes, meta, publishedSha: sha });
   assert.deepEqual(info, { id: "music", version: "0.8.1", sha256: sha, size: bytes.length, meta });
   assert.throws(() => infoFromPublished({ id: "music", version: "0.8.1", bytes, meta, publishedSha: "0".repeat(64) }), /не совпадает с опубликованным/);
