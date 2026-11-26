@@ -19,6 +19,10 @@ const WASM = join(ROOT, "wasm");
 const DIST = join(ROOT, "dist");
 const PERMS = new Set(["storage", "net.http", "net.local", "twitch.redemption", "timer", "events.publish", "chat.send", "chat.command.read", "chat.read"]);
 const EVENTS = new Set(["twitch.redemption", "chat.command", "chat.message", "timer", "http.response"]);
+// Версия API плагинов (internal/wasmplugins/meta.go: APIVersion): максимальная, которую понимает OC, и с какой версии доступны право и событие.
+const MAX_API = 2;
+const PERM_API = { "chat.read": 2 };
+const EVENT_API = { "chat.message": 2 };
 
 export function pluginIds() {
   if (!existsSync(WASM)) return [];
@@ -81,12 +85,16 @@ export function checkMeta(id, m) {
   if (m.id !== id) e.push(`id в oc_meta («${m.id}») не совпадает с именем папки («${id}»)`);
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(m.id ?? "")) e.push("id: a-z, 0-9 и «-», до 64 символов");
   if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/.test(m.version ?? "")) e.push(`version «${m.version}»: нужен semver`);
-  if (m.apiVersion !== 1) e.push(`apiVersion ${m.apiVersion}: хост понимает 1`);
+  if (!Number.isInteger(m.apiVersion) || m.apiVersion < 1 || m.apiVersion > MAX_API) e.push(`apiVersion ${m.apiVersion}: нужно целое от 1 до ${MAX_API}`);
   if (!String(m.name ?? "").trim()) e.push("name обязателен");
-  // Минимальная версия OC — тег релиза; формат тот же, что проверяет хост (internal/wasmplugins/meta.go).
-  if (m.minHost !== undefined && !/^v\d{4}\.\d{2}\.\d{2}\.\d+$/.test(m.minHost)) e.push(`minHost «${m.minHost}»: нужна версия релиза OC вида v2026.11.25.7`);
-  for (const p of m.permissions ?? []) if (!PERMS.has(p)) e.push(`неизвестное разрешение «${p}»`);
-  for (const s of m.subscriptions ?? []) if (!EVENTS.has(s)) e.push(`неизвестная подписка «${s}»`);
+  for (const p of m.permissions ?? []) {
+    if (!PERMS.has(p)) e.push(`неизвестное разрешение «${p}»`);
+    else if (m.apiVersion < (PERM_API[p] ?? 1)) e.push(`разрешение ${p} требует apiVersion не ниже ${PERM_API[p]}`);
+  }
+  for (const s of m.subscriptions ?? []) {
+    if (!EVENTS.has(s)) e.push(`неизвестная подписка «${s}»`);
+    else if (m.apiVersion < (EVENT_API[s] ?? 1)) e.push(`подписка ${s} требует apiVersion не ниже ${EVENT_API[s]}`);
+  }
   if ((m.subscriptions ?? []).includes("twitch.redemption") && !(m.permissions ?? []).includes("twitch.redemption")) e.push("подписка twitch.redemption требует разрешения twitch.redemption");
   // Действия для панели Deck: правила те же, что у OC (internal/wasmplugins/meta.go): иначе плагин не запустится.
   const actions = m.actions ?? [];

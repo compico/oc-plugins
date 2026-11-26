@@ -29,9 +29,17 @@ test("checkMeta: корректные метаданные", () => assert.deepEq
 
 test("checkMeta: разрешение net.local известно", () => assert.deepEqual(checkMeta("music", { ...good, permissions: [...good.permissions, "net.local", "chat.command.read"] }), []));
 
-test("checkMeta: minHost — версия релиза OC", () => {
-  assert.deepEqual(checkMeta("music", { ...good, minHost: "v2026.11.25.7" }), []);
-  for (const bad of ["2026.11.25.7", "v2026.11", "latest", ""]) assert.match(checkMeta("music", { ...good, minHost: bad }).join("|"), /minHost/);
+test("checkMeta: apiVersion от 1 до версии API хоста", () => {
+  for (const ok of [1, 2]) assert.deepEqual(checkMeta("music", { ...good, apiVersion: ok }), []);
+  for (const bad of [0, 3, 1.5, "2", undefined]) assert.match(checkMeta("music", { ...good, apiVersion: bad }).join("|"), /apiVersion/);
+});
+
+test("checkMeta: chat.read и chat.message требуют apiVersion 2", () => {
+  const chat = { ...good, permissions: ["chat.read"], subscriptions: ["chat.message"] };
+  assert.deepEqual(checkMeta("music", { ...chat, apiVersion: 2 }), []);
+  const r = checkMeta("music", { ...chat, apiVersion: 1 }).join("|");
+  assert.match(r, /разрешение chat\.read требует apiVersion не ниже 2/);
+  assert.match(r, /подписка chat\.message требует apiVersion не ниже 2/);
 });
 
 test("checkMeta: команды чата", () => {
@@ -42,7 +50,7 @@ test("checkMeta: команды чата", () => {
 });
 
 test("checkMeta: весь чат", () => {
-  const all = { ...good, permissions: ["chat.read"], subscriptions: ["chat.message"] };
+  const all = { ...good, apiVersion: 2, permissions: ["chat.read"], subscriptions: ["chat.message"] };
   assert.deepEqual(checkMeta("music", all), []);
   assert.match(checkMeta("music", { ...all, permissions: [] }).join("|"), /требует разрешения chat.read/);
   // chat.read и chat.command.read — независимые права
@@ -78,7 +86,7 @@ test("checkMeta: ошибки (sad path)", () => {
   bad({ id: "other" }, /не совпадает с именем папки/);
   bad({ id: "Music" }, /не совпадает|a-z/);
   bad({ version: "1.0" }, /semver/);
-  bad({ apiVersion: 2 }, /apiVersion/);
+  bad({ apiVersion: 3 }, /apiVersion/);
   bad({ name: " " }, /name обязателен/);
   bad({ permissions: ["root"] }, /неизвестное разрешение/);
   bad({ subscriptions: ["x"] }, /неизвестная подписка/);
@@ -115,7 +123,7 @@ test("infoFromPublished: метаданные опубликованного р�
   const { createHash } = await import("node:crypto");
   const bytes = Buffer.from("wasm-bytes");
   const sha = createHash("sha256").update(bytes).digest("hex");
-  const meta = { id: "music", version: "0.8.1", name: "Music", minHost: "v2026.11.25.7" }; // minHost доезжает до <id>.json
+  const meta = { id: "music", version: "0.8.1", name: "Music", apiVersion: 2 }; // apiVersion доезжает до <id>.json
   const info = infoFromPublished({ id: "music", version: "0.8.1", bytes, meta, publishedSha: sha });
   assert.deepEqual(info, { id: "music", version: "0.8.1", sha256: sha, size: bytes.length, meta });
   assert.throws(() => infoFromPublished({ id: "music", version: "0.8.1", bytes, meta, publishedSha: "0".repeat(64) }), /не совпадает с опубликованным/);

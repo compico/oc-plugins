@@ -1,2 +1,2 @@
-github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261123235032-6dbff88fe40f h1:DqGX0Wqg2OVQf7omaSRNfN9tEaOr+vZtsgQ0uRdnoMM=
-github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261123235032-6dbff88fe40f/go.mod h1:vN3OMuM6MaySeVreHAbDOPmokRzSbam0GCq8UerWCvw=
+github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261125115312-5f195dc17a30 h1:mzIMZZvXKrykEG9i6CZPzyDq2TH0cmnWfqr6cFGfIBw=
+github.com/compico/overlaycomposer/pkg/ocplugin v0.0.0-20261125115312-5f195dc17a30/go.mod h1:vN3OMuM6MaySeVreHAbDOPmokRzSbam0GCq8UerWCvw=
