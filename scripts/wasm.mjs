@@ -20,6 +20,7 @@ const DIST = join(ROOT, "dist");
 const PERMS = new Set(["storage", "net.http", "net.local", "twitch.redemption", "timer", "events.publish", "chat.send", "chat.command.read", "chat.read"]);
 const EVENTS = new Set(["twitch.redemption", "chat.command", "chat.message", "timer", "http.response"]);
 // Версия API плагинов (internal/wasmplugins/meta.go: APIVersion): максимальная, которую понимает OC, и с какой версии доступны право и событие.
+const SURFACES = new Set(["overlay", "dashboard", "deck"]);
 const MAX_API = 2;
 const PERM_API = { "chat.read": 2 };
 const EVENT_API = { "chat.message": 2 };
@@ -167,6 +168,8 @@ export function checkWidgets(meta, files) {
   if (widgets.length && !files) e.push("виджеты объявлены, а папки ui/ нет");
   if (files && !widgets.length) e.push("папка ui/ есть, но виджеты в oc_meta не объявлены (Meta.Widgets)");
   for (const w of widgets) if (files && !files.has(w.entry)) e.push(`виджет «${w.id}»: файла ui/${w.entry} нет`);
+  // Области виджета (internal/wasmplugins/meta.go: Surface*); пусто — только сцена.
+  for (const w of widgets) for (const s of w.surfaces ?? []) if (!SURFACES.has(s)) e.push(`виджет «${w.id}»: неизвестная область «${s}» (overlay, dashboard, deck)`);
   return e;
 }
 

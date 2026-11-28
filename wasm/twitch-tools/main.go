@@ -15,7 +15,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.1.0"
+const version = "0.1.1"
 
 // topicChat — топик событий для виджетов: ChatEvent как его прислал OC.
 const topicChat = "chat"
@@ -33,7 +33,7 @@ func init() {
 		Description: "Всё для Twitch в одном плагине. Сейчас — виджет чата: ники, смайлы, шрифты, цвета и фон настраиваются в редакторе; чат читается на сервере и хранится в плагине, поэтому виден сразу после открытия. Новые возможности (настройка стрима и другое) появятся здесь же.",
 		Permissions: []string{ocplugin.PermChatRead, ocplugin.PermPublish}, // events.publish: по нему виджет получает новые сообщения
 		Events:      []ocplugin.EventDecl{{ID: topicChat, Name: "Chat events", Description: "Сообщения чата и их удаление: message, delete, clear, status"}},
-		Widgets:     []ocplugin.Widget{{ID: "chat", Name: "Twitch chat", Entry: "index.html", Width: 480, Height: 600, Settings: widgetSettings()}},
+		Widgets:     []ocplugin.Widget{{ID: "chat", Name: "Twitch chat", Entry: "index.html", Width: 480, Height: 600, Settings: widgetSettings(), Surfaces: []string{ocplugin.SurfaceOverlay, ocplugin.SurfaceDashboard}}},
 		ConfigSchema: map[string]any{
 			"historySize": map[string]any{
 				"type": "string", "title": "Сколько сообщений помнить",
