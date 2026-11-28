@@ -1,4 +1,4 @@
-module github.com/compico/oc-plugins/wasm/chat
+module github.com/compico/oc-plugins/wasm/twitch-tools
 
 go 1.24
 
