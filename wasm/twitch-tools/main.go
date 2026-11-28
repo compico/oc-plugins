@@ -15,7 +15,7 @@ import (
 	"github.com/compico/overlaycomposer/pkg/ocplugin"
 )
 
-const version = "0.1.1"
+const version = "0.1.2"
 
 // topicChat — топик событий для виджетов: ChatEvent как его прислал OC.
 const topicChat = "chat"

@@ -144,7 +144,12 @@
 
   // Сначала подписка, потом история: события, пришедшие пока история загружается, ждут в очереди и не теряются; повторы отсекает hasMessage.
   var ready = false, queue = [];
-  oc.ready.then(function () {
+  oc.ready.then(function (info) {
+    // В окне Dashboard вид свой: читаемо и без затухания. Явно заданные настройки (query) не перебиваются.
+    if (info && info.surface === "dashboard") {
+      var dash = { maxMessages: 200, fadeSeconds: 0, msgSize: 16, nickSize: 16, padding: 4, gap: 4, msgColor: "#e8e8ec", shadow: false };
+      Object.keys(dash).forEach(function (k) { if (!Q.has(k)) S[k] = dash[k]; });
+    }
     return oc.plugin.subscribe("chat", function (ev) { if (ready) apply(ev, false); else queue.push(ev); });
   }).then(function () {
     return oc.plugin.get("/messages");
