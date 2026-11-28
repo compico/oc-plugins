@@ -118,6 +118,14 @@ test("checkWidgets: согласованность виджетов и папк�
   assert.match(checkWidgets(w, new Set(["other.html"])).join("|"), /ui\/index\.html нет/);
 });
 
+test("checkWidgets: области виджета", () => {
+  const files = new Set(["index.html"]);
+  const widget = (surfaces) => ({ widgets: [{ id: "queue", name: "Q", entry: "index.html", surfaces }] });
+  assert.deepEqual(checkWidgets(widget(["overlay", "dashboard"]), files), []);
+  assert.deepEqual(checkWidgets(widget(undefined), files), []); // не указаны — только сцена
+  assert.match(checkWidgets(widget(["tv"]), files).join("|"), /неизвестная область «tv»/);
+});
+
 test("infoFromPublished: метаданные опубликованного релиза и проверки совпадения", async () => {
   const { infoFromPublished } = await import("../scripts/wasm.mjs");
   const { createHash } = await import("node:crypto");
