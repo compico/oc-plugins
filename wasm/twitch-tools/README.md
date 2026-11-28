@@ -1,7 +1,8 @@
-# chat — чат Twitch
+# twitch-tools — Twitch в одном плагине
 
-Автономный (standalone) wasm-плагин для Overlay Composer: виджет чата для OBS (а позже и для Dashboard). Заменяет встроенный
-виджет `twitch-chat`.
+Автономный (standalone) wasm-плагин для Overlay Composer: всё Twitch-сторонее в одном плагине (один wasm-рантайм вместо отдельного
+на каждую возможность). Сейчас в нём виджет чата для OBS и Dashboard; заменяет встроенный виджет `twitch-chat` и плагин `chat`. Настройка
+стрима и другие возможности будут добавляться сюда же виджетами и маршрутами.
 
 ## Чем отличается от старого виджета
 
@@ -15,7 +16,7 @@
 
 ## Установка
 
-1. **Plugins → Store → Install** (или скачайте `chat.wasm` из релиза `chat-v<версия>` и положите в папку плагинов).
+1. **Plugins → Store → Install** (или скачайте `twitch-tools.wasm` из релиза `twitch-tools-v<версия>` и положите в папку плагинов).
 2. Выдайте разрешения `chat.read` и `events.publish`.
 3. Добавьте источник **Twitch chat** на сцену и настройте его в редакторе.
 
@@ -32,15 +33,15 @@
 |---|---|
 | Вход | события `chat.message` от OC: `message`, `delete`, `clear`, `status` |
 | История | в памяти плагина; после перезапуска плагина пуста и наполняется заново |
-| Виджету | `GET /plugins/chat/api/messages` (история и состояние связи) и подписка на топик `chat` |
+| Виджету | `GET /plugins/twitch-tools/api/messages` (история и состояние связи) и подписка на топик `chat` |
 | Фильтры | применяет виджет, а не плагин: у разных источников они разные |
 
 ## Сборка и тесты
 
 ```
-cd wasm/chat
+cd wasm/twitch-tools
 go test ./...
-GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o chat.wasm .
+GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o twitch-tools.wasm .
 ```
 
 Интерфейс лежит в `ui/` и упаковывается в `.wasm` при сборке (ocpack). Тест `settings_test.go` проверяет, что умолчания настроек

@@ -4,13 +4,35 @@
     "kind": "widget",
     "since": "2026-11-17",
     "reason": "Заменён плагином osu-tools: команда !np теперь работает на сервере Overlay Composer, открытый оверлей и виджет не нужны; там же график навыков.",
-    "replacedBy": { "id": "osu-tools", "kind": "wasm", "repo": "compico/oc-plugins", "url": "https://github.com/compico/oc-plugins/releases?q=osu-tools-v" }
+    "replacedBy": {
+      "id": "osu-tools",
+      "kind": "wasm",
+      "repo": "compico/oc-plugins",
+      "url": "https://github.com/compico/oc-plugins/releases?q=osu-tools-v"
+    }
   },
   {
     "id": "osu-skills",
     "kind": "wasm",
     "since": "2026-11-17",
     "reason": "Объединён с osu-np в плагин osu-tools: тот же график навыков плюс команда !np. Новых версий osu-skills не будет.",
-    "replacedBy": { "id": "osu-tools", "kind": "wasm", "repo": "compico/oc-plugins", "url": "https://github.com/compico/oc-plugins/releases?q=osu-tools-v" }
+    "replacedBy": {
+      "id": "osu-tools",
+      "kind": "wasm",
+      "repo": "compico/oc-plugins",
+      "url": "https://github.com/compico/oc-plugins/releases?q=osu-tools-v"
+    }
+  },
+  {
+    "id": "chat",
+    "kind": "wasm",
+    "since": "2026-11-28",
+    "reason": "Переименован в twitch-tools: один плагин для всего Twitch-интерфейса (чат сейчас, настройка стрима и другое позже) вместо отдельного плагина на каждую возможность. Новых версий chat не будет.",
+    "replacedBy": {
+      "id": "twitch-tools",
+      "kind": "wasm",
+      "repo": "compico/oc-plugins",
+      "url": "https://github.com/compico/oc-plugins/releases?q=twitch-tools-v"
+    }
   }
 ]
