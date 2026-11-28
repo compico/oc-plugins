@@ -12,7 +12,8 @@
     "date": "2026-11-28",
     "changes": [
       "Виджет «Twitch chat» объявлен для сцены OBS и для окна Dashboard (область dashboard): без этого Dashboard не мог его показать."
-    ],
+    ]
+  },
   {
     "version": "0.1.2",
     "date": "2026-11-28",
